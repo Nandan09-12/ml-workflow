@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.docker
+.dockerignore
+Dockerfile
+
+# Python
+app/__pycache__/
+app/*/__pycache__/
+app/*/*/__pycache__/
+app/*/*/*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.env/
+.venv/
+venv/
+
+# Env files (secrets)
+.env
+.env.*
+
+# Dev/test
+tests/
+.pytest_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
