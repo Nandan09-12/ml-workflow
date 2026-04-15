@@ -6,14 +6,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.enums import AccountStatus, AuditActionType, RequestedRole, Shift, SubmissionStatus, Zone
+from app.core.enums import (
+    AccountStatus,
+    AuditActionType,
+    RequestedRole,
+    Shift,
+    SubmissionStatus,
+    Zone,
+)
 from app.core.errors import AppError
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
-from app.services.attachment_service import AttachmentService, AttachmentUpload
 from app.repositories.attachment_repository import AttachmentRepository
+from app.services.attachment_service import AttachmentService, AttachmentUpload
 
 pytestmark = pytest.mark.integration
 

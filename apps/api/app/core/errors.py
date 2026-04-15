@@ -1,5 +1,5 @@
-from enum import StrEnum
 import uuid
+from enum import StrEnum
 
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError

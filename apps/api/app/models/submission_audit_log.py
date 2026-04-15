@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -8,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import AuditActionType, AuditSource
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.submission import Submission
 
 
 class SubmissionAuditLog(Base):

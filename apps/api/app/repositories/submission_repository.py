@@ -182,7 +182,7 @@ class SubmissionRepository(BaseRepository):
             .group_by(SubmissionAttachment.submission_id)
         )
         result = await self.session.execute(query)
-        counts: dict[uuid.UUID, int] = {submission_id: 0 for submission_id in submission_ids}
+        counts: dict[uuid.UUID, int] = dict.fromkeys(submission_ids, 0)
         for submission_id, count in result.all():
             counts[submission_id] = int(count)
         return counts

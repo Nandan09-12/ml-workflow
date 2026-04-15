@@ -14,7 +14,6 @@ from app.models import submission_attachment as _submission_attachment  # noqa: 
 from app.models import submission_audit_log as _submission_audit_log  # noqa: F401
 from app.models import user_approval_audit as _user_approval_audit  # noqa: F401
 
-
 RUN_INTEGRATION_TESTS = os.getenv("RUN_INTEGRATION_TESTS") == "1"
 INTEGRATION_DATABASE_URL = os.getenv("INTEGRATION_DATABASE_URL")
 

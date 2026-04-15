@@ -11,7 +11,11 @@ from app.core.responses import success_envelope
 from app.core.security import get_current_auth_payload
 from app.db.session import get_db_session
 from app.repositories.submission_repository import SubmissionRepository
-from app.schemas.submissions import CreateSubmissionRequest, SubmissionResponse, UpdateSubmissionRequest
+from app.schemas.submissions import (
+    CreateSubmissionRequest,
+    SubmissionResponse,
+    UpdateSubmissionRequest,
+)
 from app.services.submission_service import SubmissionService
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])

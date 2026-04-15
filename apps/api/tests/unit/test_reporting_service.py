@@ -150,7 +150,7 @@ class FakeReportingRepository:
         self,
         submission_ids: list[uuid.UUID],
     ) -> dict[uuid.UUID, int]:
-        return {submission_id: 0 for submission_id in submission_ids}
+        return dict.fromkeys(submission_ids, 0)
 
 
 def _auth_payload(user: AppUser) -> dict[str, Any]:
@@ -234,4 +234,3 @@ async def test_export_submissions_csv_uses_filter_model() -> None:
     assert repo.last_export_filters is not None
     assert repo.last_export_filters["file_submission_pending"] is True
     assert repo.last_export_filters["owner_user_id"] == repo.tester_user.id
-

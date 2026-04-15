@@ -1,8 +1,8 @@
+import os
 import uuid
 from collections.abc import Generator
 from typing import Any
 
-import os
 import pytest
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
@@ -17,11 +17,10 @@ os.environ.setdefault(
     "postgresql+asyncpg://postgres:postgres@localhost/postgres",
 )
 
-from app.main import app
-
-
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
+    from app.main import app
+
     app.dependency_overrides = {}
     with TestClient(app) as test_client:
         yield test_client

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -7,6 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import AccountStatus, RequestedRole
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.submission import Submission
+    from app.models.user_approval_audit import UserApprovalAudit
 
 
 class AppUser(Base):

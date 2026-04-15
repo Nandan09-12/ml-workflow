@@ -133,7 +133,7 @@ class ReportingRepository(BaseRepository):
             .group_by(SubmissionAttachment.submission_id)
         )
         result = await self.session.execute(query)
-        counts = {submission_id: 0 for submission_id in submission_ids}
+        counts = dict.fromkeys(submission_ids, 0)
         for submission_id, count in result.all():
             counts[submission_id] = int(count)
         return counts
@@ -171,4 +171,3 @@ class ReportingRepository(BaseRepository):
         if date_to is not None:
             query = query.where(Submission.work_date <= date_to)
         return query
-

@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import AccountStatus, RequestedRole
 from app.core.errors import AppError
 from app.models.app_user import AppUser
+from app.repositories.mobile_repository import MobileRepository
 from app.schemas.mobile import MobileSyncRequest
 from app.services.mobile_service import MobileService
-from app.repositories.mobile_repository import MobileRepository
 
 pytestmark = pytest.mark.integration
 
