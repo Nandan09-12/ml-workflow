@@ -15,6 +15,7 @@
 ### 3. My Submissions List
 - list my submissions
 - filters by date and status
+- show `file_submission_pending` indicator for completed submissions with no active file
 - create new submission button
 
 ### 4. Submission Form
@@ -24,14 +25,20 @@
 - shift dropdown
 - numeric input fields
 - save as ongoing
+- block future dates by zone-local date rule
 
 ### 5. Submission Detail
 - show all submission values
 - show status
+- show `file_submission_pending` warning when status is completed and no active attachment exists
 - show attachment list
 - upload attachment action
-- complete submission action if valid
-- audit summary if desired later
+- complete submission action when `pending_grids = 0`
+- show validation errors when attachment/type/size/count rules fail
+
+### 6. Profile Screen
+- show profile details
+- edit `full_name` only
 
 ## Admin Web Screens
 
@@ -44,18 +51,21 @@
 - list all users
 - filter by role and account status
 - user detail link
+- suspend action for approved users
 
 ### 3. Dashboard Summary Page
 - counts for approved testers, ongoing, completed, no submission yet
 - date filter
 
 ### 4. Submissions Table
-- filters: date, zone, shift, status, tester, cluster, ticket number
-- pagination
+- filters: date, zone, shift, status, tester, cluster, ticket number, `file_submission_pending`
+- pagination defaults: page 1, page size 20
+- page size max 100
 - export action
 
 ### 5. Submission Detail Page
 - full submission info
+- show `file_submission_pending` state
 - attachment list with download buttons
 - audit timeline
 - admin edit action

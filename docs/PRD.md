@@ -1,4 +1,3 @@
-```md
 # Product Requirements Document
 
 ## Product Name
@@ -24,12 +23,12 @@ Can:
 - create submissions
 - view own submissions
 - edit own ongoing submissions
-- upload required CSV/XLSX file before completion
+- upload CSV/XLSX file
 
 ### Admin
 Can:
 - sign up and request Admin role
-- approve/reject users
+- approve/reject/suspend users
 - view all submissions
 - filter by date, tester, zone, shift, cluster, status
 - view audit history
@@ -49,9 +48,10 @@ Can:
 - upload CSV/XLSX attachment
 - mark submission completed
 - view own submission history
+- update own full name only in profile
 
 ### Admin Features
-- approve or reject users
+- approve, reject, or suspend users
 - see pending users list
 - see all submissions
 - see ongoing and completed submissions
@@ -93,7 +93,27 @@ Can:
 - COMPLETED
 
 ## V1 File Upload Requirement
-Before a submission can be marked completed, at least one CSV or XLSX attachment must be uploaded.
+Submission completion does not require an attachment in v1.
+
+Completion rule:
+- `pending_grids` must be `0`
+
+Computed API indicator:
+- expose `file_submission_pending` in submission list/detail responses
+- `true` when submission is `COMPLETED` and has zero active attachments
+- `false` otherwise
+- do not persist as a DB column in v1
+
+Attachment constraints:
+- max 25 MB per file
+- max 5 active attachments per submission
+- allowed extensions: `.csv`, `.xlsx`
+- `.xls` is out of scope for v1
+
+## Validation Requirements
+- cluster normalization is required before uniqueness checks
+- future work dates are not allowed based on zone-local date
+- pagination defaults: `page=1`, `page_size=20`, max `page_size=100`
 
 ## Offline Requirement
 Offline support is required for the tester app in the product vision. Initial web-first development is acceptable, but the architecture must support offline-first mobile sync later.
@@ -101,7 +121,7 @@ Offline support is required for the tester app in the product vision. Initial we
 ## Out of Scope for V1
 - roster / assignment management
 - edit approval workflow
-- file content parsing or validation
+- file content parsing or semantic validation
 - notifications by email/push
 - cluster master-data management UI
 - team master-data management UI
@@ -112,5 +132,6 @@ Offline support is required for the tester app in the product vision. Initial we
 - users can sign up and be approved
 - testers can submit data without Google Sheets
 - admins can review all submissions in one console
-- completed records require attachments
-- all changes are audit logged
+- completed records enforce `pending_grids = 0` and expose missing-file state via `file_submission_pending`
+- all key changes are audit logged
+- first admin bootstrap works safely and only once

@@ -1,0 +1,130 @@
+import uuid
+import math
+from datetime import date
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.enums import Shift, SubmissionStatus, Zone
+from app.core.responses import success_envelope
+from app.core.security import get_current_auth_payload
+from app.db.session import get_db_session
+from app.repositories.submission_repository import SubmissionRepository
+from app.schemas.submissions import SubmissionAuditResponse, SubmissionResponse, UpdateSubmissionRequest
+from app.services.submission_service import SubmissionService
+
+router = APIRouter(prefix="/admin/submissions", tags=["admin-submissions"])
+
+
+def get_admin_submission_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> SubmissionService:
+    return SubmissionService(repository=SubmissionRepository(session))
+
+
+@router.post("/{submission_id}/reopen")
+async def reopen_submission(
+    submission_id: uuid.UUID,
+    request: Request,
+    auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
+    service: SubmissionService = Depends(get_admin_submission_service),
+) -> dict[str, Any]:
+    submission = await service.reopen_submission(auth_payload, submission_id)
+    return success_envelope(
+        data=SubmissionResponse.model_validate(submission).model_dump(mode="json"),
+        request_id=request.state.request_id,
+    )
+
+
+@router.get("")
+async def list_admin_submissions(
+    request: Request,
+    work_date: date | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    status: SubmissionStatus | None = Query(default=None),
+    zone: Zone | None = Query(default=None),
+    shift: Shift | None = Query(default=None),
+    owner_user_id: uuid.UUID | None = Query(default=None),
+    cluster_name: str | None = Query(default=None),
+    ticket_number: str | None = Query(default=None),
+    file_submission_pending: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
+    service: SubmissionService = Depends(get_admin_submission_service),
+) -> dict[str, Any]:
+    submissions, total = await service.list_admin_submissions(
+        auth_payload,
+        work_date=work_date,
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        zone=zone,
+        shift=shift,
+        owner_user_id=owner_user_id,
+        cluster_name=cluster_name,
+        ticket_number=ticket_number,
+        file_submission_pending=file_submission_pending,
+        page=page,
+        page_size=page_size,
+    )
+    items = [SubmissionResponse.model_validate(item).model_dump(mode="json") for item in submissions]
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
+    return success_envelope(
+        data={
+            "items": items,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": total_pages,
+            },
+        },
+        request_id=request.state.request_id,
+    )
+
+
+@router.get("/{submission_id}")
+async def get_admin_submission_detail(
+    submission_id: uuid.UUID,
+    request: Request,
+    auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
+    service: SubmissionService = Depends(get_admin_submission_service),
+) -> dict[str, Any]:
+    submission = await service.get_admin_submission(auth_payload, submission_id)
+    return success_envelope(
+        data=SubmissionResponse.model_validate(submission).model_dump(mode="json"),
+        request_id=request.state.request_id,
+    )
+
+
+@router.patch("/{submission_id}")
+async def update_admin_submission(
+    submission_id: uuid.UUID,
+    payload: UpdateSubmissionRequest,
+    request: Request,
+    auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
+    service: SubmissionService = Depends(get_admin_submission_service),
+) -> dict[str, Any]:
+    submission = await service.update_admin_submission(auth_payload, submission_id, payload)
+    return success_envelope(
+        data=SubmissionResponse.model_validate(submission).model_dump(mode="json"),
+        request_id=request.state.request_id,
+    )
+
+
+@router.get("/{submission_id}/audit")
+async def get_admin_submission_audit(
+    submission_id: uuid.UUID,
+    request: Request,
+    auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
+    service: SubmissionService = Depends(get_admin_submission_service),
+) -> dict[str, Any]:
+    entries = await service.get_submission_audit(auth_payload, submission_id)
+    items = [SubmissionAuditResponse.model_validate(item).model_dump(mode="json") for item in entries]
+    return success_envelope(
+        data={"items": items, "count": len(items)},
+        request_id=request.state.request_id,
+    )

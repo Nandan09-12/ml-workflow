@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ML Workflow UI Mockups</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">DT Check-in V1 Prototype</p>
+          <h1>ML Workflow UI Mockups</h1>
+          <p class="lead">
+            Click through the key tester and admin screens before we scaffold
+            the real frontend apps.
+          </p>
+        </div>
+        <div class="hero-notes">
+          <div class="note-card">
+            <span>Tester flow</span>
+            <strong>Signup -> wait -> modules -> submissions</strong>
+          </div>
+          <div class="note-card">
+            <span>Admin flow</span>
+            <strong>Approval -> dashboard -> submissions review</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="nav-panel">
+          <div class="nav-group">
+            <p class="group-title">Tester</p>
+            <button class="nav-btn active" data-screen-target="tester-login">Login</button>
+            <button class="nav-btn" data-screen-target="tester-signup">Signup</button>
+            <button class="nav-btn" data-screen-target="tester-inactive">Account Not Active</button>
+            <button class="nav-btn" data-screen-target="tester-modules">Modules</button>
+            <button class="nav-btn" data-screen-target="tester-submissions">My Submissions</button>
+            <button class="nav-btn" data-screen-target="tester-form">Submission Form</button>
+            <button class="nav-btn" data-screen-target="tester-detail">Submission Detail</button>
+          </div>
+
+          <div class="nav-group">
+            <p class="group-title">Admin</p>
+            <button class="nav-btn" data-screen-target="admin-dashboard">Dashboard</button>
+            <button class="nav-btn" data-screen-target="admin-pending">Pending Users</button>
+            <button class="nav-btn" data-screen-target="admin-submissions">Submissions Table</button>
+            <button class="nav-btn" data-screen-target="admin-detail">Submission Detail</button>
+            <button class="nav-btn" data-screen-target="admin-nosubmission">No Submission Yet</button>
+          </div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-head">
+            <div>
+              <p class="eyebrow" id="meta-app">Tester App</p>
+              <h2 id="meta-title">Login</h2>
+              <p class="route" id="meta-route">/login</p>
+            </div>
+            <p class="meta-note" id="meta-note">
+              Simple mobile-first auth screen based on your reference.
+            </p>
+          </div>
+
+          <div class="stage">
+            <section
+              class="screen active"
+              data-screen="tester-login"
+              data-app="Tester App"
+              data-title="Login"
+              data-route="/login"
+              data-note="Simple mobile-first auth screen based on your reference."
+            >
+              <div class="phone">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body auth">
+                  <div class="logo">ML</div>
+                  <h3>MLWorkFlow</h3>
+                  <p>Sign in to continue into the modules hub.</p>
+                  <label class="field"><span>Email</span><input placeholder="jane@mlworkflow.com" /></label>
+                  <label class="field"><span>Password</span><input placeholder="••••••••" type="password" /></label>
+                  <button class="primary">Sign In</button>
+                  <button class="linklike" data-jump="tester-signup">Register here</button>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-signup"
+              data-app="Tester App"
+              data-title="Signup"
+              data-route="/signup"
+              data-note="Signup stays focused: this app always requests DRIVE_TESTER."
+            >
+              <div class="phone">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body auth">
+                  <button class="ghost" data-jump="tester-login">←</button>
+                  <h3>Create account</h3>
+                  <div class="pill">Requested role: Drive Tester</div>
+                  <label class="field"><span>Full name</span><input placeholder="Jane Doe" /></label>
+                  <label class="field"><span>Email</span><input placeholder="jane@mlworkflow.com" /></label>
+                  <label class="field"><span>Password</span><input placeholder="Create password" type="password" /></label>
+                  <label class="field"><span>Confirm password</span><input placeholder="Repeat password" type="password" /></label>
+                  <button class="primary">Create Account</button>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-inactive"
+              data-app="Tester App"
+              data-title="Account Not Active"
+              data-route="/account-not-active"
+              data-note="One generic inactive state is enough for v1."
+            >
+              <div class="phone">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body center">
+                  <div class="status-dot">•</div>
+                  <h3>Account under review</h3>
+                  <p>Your Drive Tester request is waiting for admin approval.</p>
+                  <div class="info">
+                    <div><span>Status</span><strong>Pending Approval</strong></div>
+                    <div><span>Role</span><strong>Drive Tester</strong></div>
+                  </div>
+                  <button class="primary">Check status</button>
+                  <button class="secondary">Sign Out</button>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-modules"
+              data-app="Tester App"
+              data-title="Modules"
+              data-route="/modules"
+              data-note="A lightweight modules hub keeps room for future products without complicating v1."
+            >
+              <div class="phone">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body">
+                  <div class="row-between">
+                    <div>
+                      <p class="micro">Welcome back</p>
+                      <h3>Modules</h3>
+                    </div>
+                    <div class="avatar">JD</div>
+                  </div>
+                  <button class="module active" data-jump="tester-submissions">
+                    <strong>Drive Tester Check-in</strong>
+                    <span>Create, complete, and upload daily submissions.</span>
+                  </button>
+                  <div class="module muted">
+                    <strong>Quality Review</strong>
+                    <span>Coming soon</span>
+                  </div>
+                  <div class="module muted">
+                    <strong>Operations Tracker</strong>
+                    <span>Coming soon</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-submissions"
+              data-app="Tester App"
+              data-title="My Submissions"
+              data-route="/submissions"
+              data-note="Tester home inside DT Check-in. The important state is the completed item that still needs a file."
+            >
+              <div class="phone">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body">
+                  <div class="row-between">
+                    <div>
+                      <p class="micro">Drive Tester Check-in</p>
+                      <h3>My submissions</h3>
+                    </div>
+                    <button class="ghost" data-jump="tester-modules">Modules</button>
+                  </div>
+                  <div class="chips">
+                    <span class="chip active">Today</span>
+                    <span class="chip">Ongoing</span>
+                    <span class="chip">Completed</span>
+                    <span class="chip">Needs File</span>
+                  </div>
+                  <button class="submission" data-jump="tester-detail">
+                    <div class="row-between">
+                      <strong>Cluster 4 / AM</strong>
+                      <span class="badge warning">Completed / file pending</span>
+                    </div>
+                    <span>NORTHEAST • Apr 15 • Ticket 8891</span>
+                  </button>
+                  <div class="submission">
+                    <div class="row-between">
+                      <strong>Cluster 2 / PM</strong>
+                      <span class="badge neutral">Ongoing</span>
+                    </div>
+                    <span>CENTRAL • Apr 14 • Ticket 7712</span>
+                  </div>
+                  <button class="fab" data-jump="tester-form">+ New submission</button>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-form"
+              data-app="Tester App"
+              data-title="Submission Form"
+              data-route="/submissions/new"
+              data-note="Create and edit can share one form. Upload appears after the first save."
+            >
+              <div class="phone tall">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body">
+                  <div class="row-between">
+                    <div>
+                      <p class="micro">Drive Tester Check-in</p>
+                      <h3>New submission</h3>
+                    </div>
+                    <button class="ghost" data-jump="tester-submissions">Close</button>
+                  </div>
+                  <div class="grid two">
+                    <label class="field"><span>Work date</span><input value="2026-04-15" /></label>
+                    <label class="field"><span>Zone</span><input value="NORTHEAST" /></label>
+                    <label class="field"><span>Shift</span><input value="AM" /></label>
+                    <label class="field"><span>Team number</span><input placeholder="Team number" /></label>
+                    <label class="field"><span>Ticket number</span><input placeholder="Ticket number" /></label>
+                    <label class="field"><span>Cluster name</span><input placeholder="Cluster 4" /></label>
+                  </div>
+                  <div class="card">
+                    <div class="row-between"><strong>Grid counts</strong><span class="micro">Must balance</span></div>
+                    <div class="grid two">
+                      <label class="field"><span>Number of grids</span><input value="24" /></label>
+                      <label class="field"><span>Completed grids</span><input value="18" /></label>
+                      <label class="field"><span>Pending grids</span><input value="6" /></label>
+                      <label class="field"><span>Skipped grids</span><input value="0" /></label>
+                    </div>
+                  </div>
+                  <div class="card dashed">
+                    <div class="row-between"><strong>Attachment upload</strong><span class="micro">After first save</span></div>
+                    <p>CSV and XLSX only. Max 5 active files, 25 MB each.</p>
+                  </div>
+                  <div class="stack-actions">
+                    <button class="secondary">Save as ongoing</button>
+                    <button class="primary">Save and continue</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="tester-detail"
+              data-app="Tester App"
+              data-title="Submission Detail"
+              data-route="/submissions/[id]"
+              data-note="Completed stays completed in v1, and file_submission_pending becomes the warning state instead of a new status."
+            >
+              <div class="phone tall">
+                <div class="phone-top"><span>9:41</span><div class="notch"></div><span>100%</span></div>
+                <div class="phone-body">
+                  <div class="row-between">
+                    <div>
+                      <p class="micro">Submission detail</p>
+                      <h3>Cluster 4 / AM</h3>
+                    </div>
+                    <span class="badge success">Completed</span>
+                  </div>
+                  <div class="alert warning-bg">
+                    <strong>CSV/XLSX still pending</strong>
+                    <p>Completion is allowed, but no active attachment exists yet.</p>
+                  </div>
+                  <div class="info">
+                    <div><span>Zone</span><strong>NORTHEAST</strong></div>
+                    <div><span>Work date</span><strong>Apr 15, 2026</strong></div>
+                    <div><span>Ticket</span><strong>8891</strong></div>
+                    <div><span>Version</span><strong>7</strong></div>
+                  </div>
+                  <div class="card">
+                    <div class="row-between"><strong>Grid summary</strong><span class="micro">Balanced</span></div>
+                    <div class="grid two summary-list">
+                      <span>Number of grids 24</span>
+                      <span>Completed 24</span>
+                      <span>Pending 0</span>
+                      <span>Skipped 0</span>
+                    </div>
+                  </div>
+                  <div class="card dashed">
+                    <div class="row-between"><strong>Attachments</strong><span class="micro">0 active</span></div>
+                    <button class="primary">Upload attachment</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="admin-dashboard"
+              data-app="Admin Web"
+              data-title="Dashboard"
+              data-route="/dashboard"
+              data-note="Admin landing page after module entry. It surfaces approvals, ongoing work, and file-pending follow-up."
+            >
+              <div class="desktop">
+                <div class="browser">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <div class="url">/modules/drive-tester-check-in/dashboard</div>
+                </div>
+                <div class="desktop-layout">
+                  <aside class="side">
+                    <div class="side-brand"><div class="logo small">ML</div><div><strong>ML Workflow</strong><span>DT Check-in</span></div></div>
+                    <button class="side-btn active">Dashboard</button>
+                    <button class="side-btn" data-jump="admin-pending">Pending Users</button>
+                    <button class="side-btn" data-jump="admin-submissions">Submissions</button>
+                    <button class="side-btn" data-jump="admin-nosubmission">No Submission Yet</button>
+                  </aside>
+                  <div class="content">
+                    <div class="row-between">
+                      <div><p class="micro">Admin overview</p><h3>Dashboard</h3></div>
+                      <div class="chips"><span class="chip active">Apr 15, 2026</span><span class="chip">Export</span></div>
+                    </div>
+                    <div class="stats">
+                      <div class="stat"><span>Approved testers</span><strong>42</strong></div>
+                      <div class="stat"><span>Ongoing</span><strong>17</strong></div>
+                      <div class="stat"><span>Completed</span><strong>25</strong></div>
+                      <div class="stat warning-bg"><span>No submission yet</span><strong>8</strong></div>
+                    </div>
+                    <div class="desktop-grid">
+                      <div class="card">
+                        <div class="row-between"><strong>Priority queue</strong><span class="micro">Today</span></div>
+                        <p>5 pending approvals</p>
+                        <p>7 completed submissions still missing files</p>
+                      </div>
+                      <div class="card">
+                        <div class="row-between"><strong>Zone snapshot</strong><span class="micro">Best effort</span></div>
+                        <p>NORTHEAST 18 submissions</p>
+                        <p>CENTRAL 14 submissions</p>
+                        <p>SOUTH_FLORIDA 10 submissions</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="admin-pending"
+              data-app="Admin Web"
+              data-title="Pending Users"
+              data-route="/users/pending"
+              data-note="Dedicated queue for approvals keeps admin review fast."
+            >
+              <div class="desktop">
+                <div class="browser">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <div class="url">/users/pending</div>
+                </div>
+                <div class="desktop-layout">
+                  <aside class="side">
+                    <div class="side-brand"><div class="logo small">ML</div><div><strong>ML Workflow</strong><span>DT Check-in</span></div></div>
+                    <button class="side-btn" data-jump="admin-dashboard">Dashboard</button>
+                    <button class="side-btn active">Pending Users</button>
+                    <button class="side-btn" data-jump="admin-submissions">Submissions</button>
+                    <button class="side-btn" data-jump="admin-nosubmission">No Submission Yet</button>
+                  </aside>
+                  <div class="content">
+                    <div class="row-between">
+                      <div><p class="micro">Access review</p><h3>Pending users</h3></div>
+                      <div class="chips"><span class="chip active">All</span><span class="chip">Drive Tester</span><span class="chip">Admin</span></div>
+                    </div>
+                    <div class="table">
+                      <div class="thead"><span>Name</span><span>Email</span><span>Role</span><span>Requested</span><span>Actions</span></div>
+                      <div class="trow"><span>Jane Doe</span><span>jane@mlworkflow.com</span><span>Drive Tester</span><span>Apr 15</span><span class="actions"><button class="small ok">Approve</button><button class="small danger">Reject</button></span></div>
+                      <div class="trow"><span>Alex Admin</span><span>alex@mlworkflow.com</span><span>Admin</span><span>Apr 15</span><span class="actions"><button class="small ok">Approve</button><button class="small danger">Reject</button></span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="admin-submissions"
+              data-app="Admin Web"
+              data-title="Submissions Table"
+              data-route="/submissions"
+              data-note="Structured filters fit your API better than one free-form search field."
+            >
+              <div class="desktop">
+                <div class="browser">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <div class="url">/submissions?date=2026-04-15&amp;status=completed</div>
+                </div>
+                <div class="desktop-layout">
+                  <aside class="side">
+                    <div class="side-brand"><div class="logo small">ML</div><div><strong>ML Workflow</strong><span>DT Check-in</span></div></div>
+                    <button class="side-btn" data-jump="admin-dashboard">Dashboard</button>
+                    <button class="side-btn" data-jump="admin-pending">Pending Users</button>
+                    <button class="side-btn active">Submissions</button>
+                    <button class="side-btn" data-jump="admin-nosubmission">No Submission Yet</button>
+                  </aside>
+                  <div class="content">
+                    <div class="row-between">
+                      <div><p class="micro">Operations review</p><h3>Submissions</h3></div>
+                      <div class="chips"><span class="chip active">Apr 15</span><span class="chip">Completed</span><span class="chip">Needs File</span></div>
+                    </div>
+                    <div class="table">
+                      <div class="thead seven"><span>Date</span><span>Tester</span><span>Zone</span><span>Shift</span><span>Cluster</span><span>Status</span><span>Action</span></div>
+                      <div class="trow seven"><span>Apr 15</span><span>Jane Doe</span><span>NORTHEAST</span><span>AM</span><span>Cluster 4</span><span class="badge warning">Completed / file pending</span><span><button class="small" data-jump="admin-detail">View</button></span></div>
+                      <div class="trow seven"><span>Apr 15</span><span>Maria Lee</span><span>CENTRAL</span><span>PM</span><span>Cluster 8</span><span class="badge neutral">Ongoing</span><span><button class="small">View</button></span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="admin-detail"
+              data-app="Admin Web"
+              data-title="Submission Detail"
+              data-route="/submissions/[id]"
+              data-note="Data, attachments, and audit history live together so admins can review and reopen from one place."
+            >
+              <div class="desktop">
+                <div class="browser">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <div class="url">/submissions/subm_1024</div>
+                </div>
+                <div class="desktop-layout">
+                  <aside class="side">
+                    <div class="side-brand"><div class="logo small">ML</div><div><strong>ML Workflow</strong><span>DT Check-in</span></div></div>
+                    <button class="side-btn" data-jump="admin-dashboard">Dashboard</button>
+                    <button class="side-btn" data-jump="admin-pending">Pending Users</button>
+                    <button class="side-btn active" data-jump="admin-submissions">Submissions</button>
+                    <button class="side-btn" data-jump="admin-nosubmission">No Submission Yet</button>
+                  </aside>
+                  <div class="content">
+                    <div class="row-between">
+                      <div><p class="micro">Submission review</p><h3>Jane Doe / Cluster 4</h3></div>
+                      <div class="chips"><span class="chip">Edit</span><span class="chip active">Reopen</span></div>
+                    </div>
+                    <div class="alert warning-bg">
+                      <strong>Completed, but file still pending</strong>
+                      <p>Use a warning state instead of adding another workflow status.</p>
+                    </div>
+                    <div class="desktop-grid">
+                      <div class="card">
+                        <div class="row-between"><strong>Submission data</strong><span class="badge success">Completed</span></div>
+                        <div class="info">
+                          <div><span>Tester</span><strong>Jane Doe</strong></div>
+                          <div><span>Zone</span><strong>NORTHEAST</strong></div>
+                          <div><span>Date</span><strong>Apr 15, 2026</strong></div>
+                          <div><span>Version</span><strong>7</strong></div>
+                        </div>
+                      </div>
+                      <div class="card">
+                        <div class="row-between"><strong>Audit history</strong><span class="micro">Inline</span></div>
+                        <p>Completed by Jane Doe - 4:18 PM</p>
+                        <p>Updated by Jane Doe - pending 3 to 0</p>
+                        <p>Created by Jane Doe - 8:05 AM</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="screen"
+              data-screen="admin-nosubmission"
+              data-app="Admin Web"
+              data-title="No Submission Yet"
+              data-route="/reports/no-submission-yet"
+              data-note="This page needs a clear best-effort disclaimer so it does not read like an assignment board."
+            >
+              <div class="desktop">
+                <div class="browser">
+                  <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                  <div class="url">/reports/no-submission-yet?date=2026-04-15</div>
+                </div>
+                <div class="desktop-layout">
+                  <aside class="side">
+                    <div class="side-brand"><div class="logo small">ML</div><div><strong>ML Workflow</strong><span>DT Check-in</span></div></div>
+                    <button class="side-btn" data-jump="admin-dashboard">Dashboard</button>
+                    <button class="side-btn" data-jump="admin-pending">Pending Users</button>
+                    <button class="side-btn" data-jump="admin-submissions">Submissions</button>
+                    <button class="side-btn active">No Submission Yet</button>
+                  </aside>
+                  <div class="content">
+                    <div class="row-between">
+                      <div><p class="micro">Best-effort reporting</p><h3>No submission yet</h3></div>
+                      <div class="chips"><span class="chip active">Apr 15, 2026</span></div>
+                    </div>
+                    <div class="alert info-bg">
+                      <strong>Not assignment-based</strong>
+                      <p>Approved drive testers with no submission on the selected date.</p>
+                    </div>
+                    <div class="table">
+                      <div class="thead four"><span>Name</span><span>Email</span><span>Zone</span><span>Last submission</span></div>
+                      <div class="trow four"><span>Chris Hall</span><span>chris@mlworkflow.com</span><span>NORTHEAST</span><span>Apr 14</span></div>
+                      <div class="trow four"><span>Priya Shah</span><span>priya@mlworkflow.com</span><span>SOUTH_FLORIDA</span><span>Apr 13</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
