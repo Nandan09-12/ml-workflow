@@ -1,6 +1,6 @@
 import asyncio
-from datetime import date, timedelta
 import uuid
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import select

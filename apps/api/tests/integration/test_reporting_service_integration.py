@@ -3,10 +3,20 @@ from datetime import date
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import AccountStatus, RequestedRole, SubmissionStatus, WorkorderStatus
+from app.core.enums import (
+    AccountStatus,
+    RequestedRole,
+    SubmissionStatus,
+    WorkorderStatus,
+)
 from app.repositories.reporting_repository import ReportingRepository
 from app.services.reporting_service import ReportingService
-from tests.integration.helpers import auth_payload, build_submission, build_user, build_workorder
+from tests.integration.helpers import (
+    auth_payload,
+    build_submission,
+    build_user,
+    build_workorder,
+)
 
 pytestmark = pytest.mark.integration
 
