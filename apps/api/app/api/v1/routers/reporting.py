@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import Shift, SubmissionStatus, Zone
+from app.core.enums import Shift, SubmissionStatus
 from app.core.responses import success_envelope
 from app.core.security import get_current_auth_payload
 from app.db.session import get_db_session
@@ -84,10 +84,8 @@ async def export_submissions_csv(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     status: SubmissionStatus | None = Query(default=None),
-    zone: Zone | None = Query(default=None),
     shift: Shift | None = Query(default=None),
     owner_user_id: uuid.UUID | None = Query(default=None),
-    cluster_name: str | None = Query(default=None),
     ticket_number: str | None = Query(default=None),
     file_submission_pending: bool | None = Query(default=None),
     auth_payload: dict[str, Any] = Depends(get_current_auth_payload),
@@ -99,10 +97,8 @@ async def export_submissions_csv(
         date_from=date_from,
         date_to=date_to,
         status=status,
-        zone=zone,
         shift=shift,
         owner_user_id=owner_user_id,
-        cluster_name=cluster_name,
         ticket_number=ticket_number,
         file_submission_pending=file_submission_pending,
     )

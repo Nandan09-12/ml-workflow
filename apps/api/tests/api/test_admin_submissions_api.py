@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from app.api.v1.routers.admin_submissions import get_admin_submission_service
-from app.core.enums import Shift, SubmissionStatus, Zone
+from app.core.enums import Shift, SubmissionStatus
 from app.core.errors import AppError, ErrorCode
 from app.core.security import get_current_auth_payload
 
@@ -18,20 +18,18 @@ class FakeSubmissionView:
     owner_user_id: uuid.UUID
     submitter_name_snapshot: str
     submitter_email_snapshot: str
-    zone: Zone
+    workorder_id: uuid.UUID
     work_date: date
     shift: Shift
     team_number: str | None
     ticket_number: str | None
-    cluster_name: str
-    cluster_name_normalized: str
-    number_of_grids: int
     skipped_grids: int
     force_tested_grids: int
-    pending_grids: int
     completed_grids: int
     status: SubmissionStatus
     version_number: int
+    started_at: datetime
+    ended_at: datetime | None
     created_at: datetime
     updated_at: datetime
     file_submission_pending: bool
@@ -60,20 +58,18 @@ class FakeAdminSubmissionService:
             owner_user_id=uuid.uuid4(),
             submitter_name_snapshot="Tester Name",
             submitter_email_snapshot="tester@example.com",
-            zone=Zone.NORTHEAST,
+            workorder_id=uuid.uuid4(),
             work_date=date(2026, 4, 14),
             shift=Shift.AM,
             team_number="11",
             ticket_number="TKT-1",
-            cluster_name="North-1",
-            cluster_name_normalized="NORTH 1",
-            number_of_grids=10,
             skipped_grids=1,
             force_tested_grids=0,
-            pending_grids=0,
             completed_grids=9,
             status=SubmissionStatus.COMPLETED,
             version_number=3,
+            started_at=now,
+            ended_at=now,
             created_at=now,
             updated_at=now,
             file_submission_pending=True,
@@ -99,7 +95,7 @@ class FakeAdminSubmissionService:
         return FakeSubmissionView(
             **{
                 **self.item.__dict__,
-                "status": SubmissionStatus.ONGOING,
+                "status": SubmissionStatus.IN_PROGRESS,
                 "file_submission_pending": False,
                 "version_number": self.item.version_number + 1,
             }
@@ -113,10 +109,8 @@ class FakeAdminSubmissionService:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
         page: int = 1,
@@ -181,7 +175,7 @@ def test_admin_reopen_success_envelope(
 
     assert response.status_code == 200
     assert body["success"] is True
-    assert body["data"]["status"] == "ONGOING"
+    assert body["data"]["status"] == "IN_PROGRESS"
     assert body["data"]["file_submission_pending"] is False
     assert "request_id" in body["meta"]
 

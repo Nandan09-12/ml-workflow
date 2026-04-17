@@ -57,30 +57,52 @@ ml-workflow/
 
 ## Data Model Ownership
 - Supabase Auth stores auth identities
-- app database stores business entities such as app users, submissions, attachment metadata, and audit logs
+- app database stores business entities such as app users, workorders, daily submissions, attachment metadata, and audit logs
+- `workorders` is the parent business entity for a multi-day job
+- `submissions` is the child daily closeout entity under a workorder
+- one workorder may span multiple days and different drivers, but only one driver may own a given workorder on a given day
+- v1 stores only the latest cumulative progress for the current day on the daily submission row
+- structured 4-hour checkpoint history is deferred to a future version as an additive table, not a replacement architecture
 
 ## File Storage Model
 - actual file bytes stored in Supabase Storage
 - file metadata stored in `submission_attachments`
-- attachment rows link files to submissions and uploading users
+- attachment rows link files to daily submissions and uploading users
+- each daily submission has exactly one active file in v1
+- attachment removal is soft-delete metadata, not hard-delete metadata
 - bucket is private
 - FastAPI generates signed download URLs after permission checks
+- admins can review inactive attachment metadata as part of history/review workflows
 
 ## API Contract Pattern
 - thin routers
 - service layer for business rules
 - repository layer for data access
 - all mutation endpoints create audit logs
-- separate admin routes from tester routes
+- separate tester routes from admin routes
+- separate workorder concepts from daily submission concepts
 - standard JSON response envelope for JSON endpoints
-- submission list/detail responses include computed `file_submission_pending`
+- daily submission list/detail responses include:
+  - daily submission fields
+  - `file_submission_pending`
+  - a nested workorder summary with aggregate progress values
 
 ## Canonicalization and Validation
-- cluster normalization is deterministic and stored in `cluster_name_normalized`
-- work date future validation is zone-aware:
-  - `NORTHEAST -> America/New_York`
+- `workorder_code` is the stable business identifier across days
+- workorder code normalization is deterministic and stored in `workorder_code_normalized`
+- normalization rules:
+  - Unicode NFKC
+  - trim
+  - uppercase
+  - remove whitespace
+  - preserve `-`
+- work date future validation is region-aware:
+  - `NE_UP -> America/New_York`
   - `SOUTH_FLORIDA -> America/New_York`
   - `CENTRAL -> America/Chicago`
+- `region` and `total_grids` belong to the parent workorder, not the daily submission
+- daily submission grid counts are contribution counts for that one day only
+- aggregate workorder progress is derived from child daily submissions
 - pagination defaults:
   - `page=1`
   - `page_size=20`
@@ -95,15 +117,34 @@ ml-workflow/
 3. app user row is created with requested role and pending status
 4. admin approves, rejects, or suspends user
 
-### Submission Flow
-1. tester creates ongoing submission
-2. tester edits while ongoing
-3. tester marks submission completed when `pending_grids = 0`
-4. tester uploads CSV/XLSX attachment before or after completion
-5. admin may reopen if correction is needed
+### Start Drive / Workorder Attach Flow
+1. tester enters `workorder_code` and daily start fields
+2. backend normalizes the code
+3. if an active workorder exists for that normalized code, backend reuses it
+4. if no active workorder exists, backend creates one using `region` and grand `total_grids`
+5. backend creates the daily submission in `IN_PROGRESS` and stamps `started_at`
+
+### Daily Progress / Closeout Flow
+1. tester updates cumulative `completed_grids` during the day on the current daily submission
+2. tester presses `End Drive`
+3. backend stamps `ended_at` and moves the daily submission to `CHECKED_OUT`
+4. tester receives the daily file and final `skipped_grids` / `force_tested_grids`
+5. tester uploads the file and completes the daily submission
+6. backend updates parent workorder aggregate progress
+
+### Workorder Completion / Continuation Flow
+1. if aggregate child `completed_grids + skipped_grids` is still below parent `total_grids`, the workorder remains `ACTIVE`
+2. same driver or different driver on a later day enters the same `workorder_code`
+3. backend attaches the new daily submission to the same active workorder
+4. when aggregate child `completed_grids + skipped_grids = total_grids`, backend marks the parent workorder `COMPLETED`
+
+### Reminder / Progress Note
+- the 4-hour reminder cadence is part of the product workflow
+- v1 backend stores only the latest cumulative progress for the current day on the daily submission row
+- v1 does not yet include backend-managed reminder scheduling or a structured checkpoint history table
 
 ### Audit Flow
-All create, edit, upload, complete, reopen, approve, reject, and auto-bootstrap approval actions are audit logged.
+All create, edit, upload, remove, start-drive, end-drive, complete, reopen, approve, reject, and auto-bootstrap approval actions are audit logged. Workorder create/attach/complete/reopen effects are recorded in the related daily submission audit trail in v1.
 
 ## Deployment Approach
 

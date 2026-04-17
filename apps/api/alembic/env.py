@@ -13,10 +13,11 @@ from app.models import (
     SubmissionAttachment,
     SubmissionAuditLog,
     UserApprovalAudit,
+    Workorder,
 )
 
 # Keep model imports explicit so autogenerate sees metadata for all tables.
-_ = (AppUser, Submission, SubmissionAttachment, SubmissionAuditLog, UserApprovalAudit)
+_ = (AppUser, Submission, SubmissionAttachment, SubmissionAuditLog, UserApprovalAudit, Workorder)
 
 config = context.config
 settings = get_settings()
@@ -69,4 +70,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_migrations_online())
-

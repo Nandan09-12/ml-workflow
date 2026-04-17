@@ -68,7 +68,7 @@ def _build_submission(
     work_date: date,
     cluster_name: str,
     cluster_name_normalized: str,
-    status: SubmissionStatus = SubmissionStatus.ONGOING,
+    status: SubmissionStatus = SubmissionStatus.IN_PROGRESS,
     pending_grids: int = 2,
     completed_grids: int = 7,
     version_number: int = 1,
@@ -137,7 +137,7 @@ async def test_submission_create_persists_normalized_cluster_and_audit(
 
     assert created.cluster_name == "Clu-ster__One"
     assert created.cluster_name_normalized == "CLU STER ONE"
-    assert created.status == SubmissionStatus.ONGOING
+    assert created.status == SubmissionStatus.IN_PROGRESS
     assert created.file_submission_pending is False
 
     saved = (
@@ -292,7 +292,7 @@ async def test_submission_complete_then_reopen_updates_status_flags_and_audit(
 
     assert completed.status == SubmissionStatus.COMPLETED
     assert completed.file_submission_pending is True
-    assert reopened.status == SubmissionStatus.ONGOING
+    assert reopened.status == SubmissionStatus.IN_PROGRESS
     assert reopened.file_submission_pending is False
 
     saved = (

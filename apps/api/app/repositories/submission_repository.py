@@ -5,11 +5,12 @@ from datetime import date
 
 from sqlalchemy import and_, func, not_, select
 
-from app.core.enums import Shift, SubmissionStatus, Zone
+from app.core.enums import Shift, SubmissionStatus
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 from app.repositories.base import BaseRepository
 
 
@@ -19,20 +20,16 @@ class SubmissionRepository(BaseRepository):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_duplicate_for_owner(
+    async def get_submission_by_workorder_date(
         self,
         *,
-        owner_user_id: uuid.UUID,
+        workorder_id: uuid.UUID,
         work_date: date,
-        shift: Shift,
-        cluster_name_normalized: str,
         exclude_submission_id: uuid.UUID | None = None,
     ) -> Submission | None:
         query = select(Submission).where(
-            Submission.owner_user_id == owner_user_id,
+            Submission.workorder_id == workorder_id,
             Submission.work_date == work_date,
-            Submission.shift == shift,
-            Submission.cluster_name_normalized == cluster_name_normalized,
         )
         if exclude_submission_id is not None:
             query = query.where(Submission.id != exclude_submission_id)
@@ -52,7 +49,6 @@ class SubmissionRepository(BaseRepository):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         offset: int = 0,
         limit: int = 20,
@@ -72,9 +68,6 @@ class SubmissionRepository(BaseRepository):
         if status is not None:
             users_query = users_query.where(Submission.status == status)
             count_query = count_query.where(Submission.status == status)
-        if zone is not None:
-            users_query = users_query.where(Submission.zone == zone)
-            count_query = count_query.where(Submission.zone == zone)
         if shift is not None:
             users_query = users_query.where(Submission.shift == shift)
             count_query = count_query.where(Submission.shift == shift)
@@ -95,10 +88,8 @@ class SubmissionRepository(BaseRepository):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
         offset: int = 0,
@@ -114,10 +105,8 @@ class SubmissionRepository(BaseRepository):
             date_from=date_from,
             date_to=date_to,
             status=status,
-            zone=zone,
             shift=shift,
             owner_user_id=owner_user_id,
-            cluster_name=cluster_name,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
         )
@@ -210,10 +199,8 @@ class SubmissionRepository(BaseRepository):
         date_from: date | None,
         date_to: date | None,
         status: SubmissionStatus | None,
-        zone: Zone | None,
         shift: Shift | None,
         owner_user_id: uuid.UUID | None,
-        cluster_name: str | None,
         ticket_number: str | None,
         file_submission_pending: bool | None,
     ) -> tuple[object, object]:
@@ -229,19 +216,12 @@ class SubmissionRepository(BaseRepository):
         if status is not None:
             items_query = items_query.where(Submission.status == status)
             count_query = count_query.where(Submission.status == status)
-        if zone is not None:
-            items_query = items_query.where(Submission.zone == zone)
-            count_query = count_query.where(Submission.zone == zone)
         if shift is not None:
             items_query = items_query.where(Submission.shift == shift)
             count_query = count_query.where(Submission.shift == shift)
         if owner_user_id is not None:
             items_query = items_query.where(Submission.owner_user_id == owner_user_id)
             count_query = count_query.where(Submission.owner_user_id == owner_user_id)
-        if cluster_name:
-            pattern = f"%{cluster_name.strip()}%"
-            items_query = items_query.where(Submission.cluster_name.ilike(pattern))
-            count_query = count_query.where(Submission.cluster_name.ilike(pattern))
         if ticket_number:
             pattern = f"%{ticket_number.strip()}%"
             items_query = items_query.where(Submission.ticket_number.ilike(pattern))
@@ -258,7 +238,7 @@ class SubmissionRepository(BaseRepository):
                 .scalar_subquery()
             )
             pending_predicate = and_(
-                Submission.status == SubmissionStatus.COMPLETED,
+                Submission.status == SubmissionStatus.CHECKED_OUT,
                 active_attachment_count == 0,
             )
             if file_submission_pending:
@@ -269,3 +249,54 @@ class SubmissionRepository(BaseRepository):
                 count_query = count_query.where(not_(pending_predicate))
 
         return items_query, count_query
+
+    async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None:
+        query = select(Workorder).where(Workorder.id == workorder_id)
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def save_workorder(self, workorder: Workorder) -> Workorder:
+        self.session.add(workorder)
+        await self.session.flush()
+        return workorder
+
+    async def get_aggregate_progress(self, workorder_id: uuid.UUID) -> tuple[int, int]:
+        """Return (sum_completed_grids, sum_skipped_grids) across all child submissions."""
+        query = select(
+            func.coalesce(func.sum(Submission.completed_grids), 0),
+            func.coalesce(func.sum(Submission.skipped_grids), 0),
+        ).where(Submission.workorder_id == workorder_id)
+        result = await self.session.execute(query)
+        row = result.one()
+        return int(row[0]), int(row[1])
+
+    async def get_workorders_by_ids(
+        self, workorder_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Workorder]:
+        if not workorder_ids:
+            return {}
+        query = select(Workorder).where(Workorder.id.in_(workorder_ids))
+        result = await self.session.execute(query)
+        rows = result.scalars().all()
+        return {wo.id: wo for wo in rows}
+
+    async def get_aggregate_progress_batch(
+        self, workorder_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, tuple[int, int]]:
+        if not workorder_ids:
+            return {}
+        query = (
+            select(
+                Submission.workorder_id,
+                func.coalesce(func.sum(Submission.completed_grids), 0),
+                func.coalesce(func.sum(Submission.skipped_grids), 0),
+            )
+            .where(Submission.workorder_id.in_(workorder_ids))
+            .group_by(Submission.workorder_id)
+        )
+        result = await self.session.execute(query)
+        rows = result.all()
+        aggregates: dict[uuid.UUID, tuple[int, int]] = dict.fromkeys(workorder_ids, (0, 0))
+        for row in rows:
+            aggregates[row[0]] = (int(row[1]), int(row[2]))
+        return aggregates

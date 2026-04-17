@@ -3,6 +3,7 @@ from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.user_approval_audit import UserApprovalAudit
+from app.models.workorder import Workorder
 
 __all__ = [
     "AppUser",
@@ -10,4 +11,5 @@ __all__ = [
     "SubmissionAttachment",
     "SubmissionAuditLog",
     "UserApprovalAudit",
+    "Workorder",
 ]

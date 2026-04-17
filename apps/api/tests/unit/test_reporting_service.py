@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus, Zone
+from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
 from app.core.errors import AppError
 from app.models.app_user import AppUser
 from app.services.reporting_service import ReportingService
@@ -66,7 +66,7 @@ class FakeReportingRepository:
             "date_from": date_from,
             "date_to": date_to,
         }
-        if status == SubmissionStatus.ONGOING:
+        if status == SubmissionStatus.IN_PROGRESS:
             return 2
         return 3
 
@@ -96,10 +96,8 @@ class FakeReportingRepository:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
     ) -> list[Any]:
@@ -108,10 +106,8 @@ class FakeReportingRepository:
             "date_from": date_from,
             "date_to": date_to,
             "status": status,
-            "zone": zone,
             "shift": shift,
             "owner_user_id": owner_user_id,
-            "cluster_name": cluster_name,
             "ticket_number": ticket_number,
             "file_submission_pending": file_submission_pending,
         }
@@ -126,20 +122,18 @@ class FakeReportingRepository:
                     "owner_user_id": self.tester_user.id,
                     "submitter_name_snapshot": "Tester User",
                     "submitter_email_snapshot": "tester@example.com",
-                    "zone": Zone.NORTHEAST,
+                    "workorder_id": uuid.uuid4(),
                     "work_date": date(2026, 4, 14),
                     "shift": Shift.AM,
                     "team_number": "11",
                     "ticket_number": "TKT-1",
-                    "cluster_name": "North",
-                    "cluster_name_normalized": "NORTH",
-                    "number_of_grids": 10,
                     "skipped_grids": 1,
                     "force_tested_grids": 0,
-                    "pending_grids": 0,
                     "completed_grids": 9,
                     "status": SubmissionStatus.COMPLETED,
                     "version_number": 2,
+                    "started_at": now,
+                    "ended_at": now,
                     "created_at": now,
                     "updated_at": now,
                 },
@@ -218,10 +212,8 @@ async def test_export_submissions_csv_uses_filter_model() -> None:
         _auth_payload(repo.admin_user),
         work_date=date(2026, 4, 14),
         status=SubmissionStatus.COMPLETED,
-        zone=Zone.NORTHEAST,
         shift=Shift.AM,
         owner_user_id=repo.tester_user.id,
-        cluster_name="North",
         ticket_number="TKT",
         file_submission_pending=True,
     )

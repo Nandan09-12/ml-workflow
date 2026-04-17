@@ -29,58 +29,106 @@
 3. user saves
 4. system updates full name only
 
-## Submission Create Flow
-1. drive tester opens create submission form
-2. date defaults to today
-3. tester fills fields
-4. backend normalizes cluster name into `cluster_name_normalized`
-5. backend validates no future date by zone timezone
-6. tester saves submission
-7. submission is created as `ONGOING`
-8. audit record is created
+## Start Drive / Workorder Resolve Flow
+1. approved drive tester opens `Start Drive`
+2. tester enters `workorder_code`
+3. backend normalizes the code
+4. if an active workorder exists:
+   - system returns the existing parent workorder
+   - UI reuses the stored `region` and grand `total_grids`
+5. if no active workorder exists:
+   - tester provides `region` and grand `total_grids`
+   - backend creates the parent workorder
+6. tester enters daily fields:
+   - `work_date`
+   - `shift`
+   - `team_number`
+   - `ticket_number`
+7. tester presses `Start Drive`
+8. daily submission is created as `IN_PROGRESS`
+9. backend stamps `started_at`
+10. audit record is created
 
-## Submission Edit Flow
-1. tester opens one of their `ONGOING` submissions
-2. tester edits values
+## Daily Progress Update Flow
+1. tester opens one of their `IN_PROGRESS` daily submissions
+2. tester is prompted during the day to enter the latest cumulative `completed_grids` for that day
 3. tester saves changes
-4. system validates grid math
-5. system validates optimistic version
+4. backend validates optimistic version
+5. backend validates aggregate workorder totals do not exceed parent `total_grids`
 6. version increments
 7. audit record is created
 
-## Attachment Upload Flow
-1. tester opens submission detail
-2. tester uploads CSV/XLSX file
-3. backend validates extension + MIME, size <= 25 MB, active attachment count <= 5
+## End Drive Flow
+1. tester opens an `IN_PROGRESS` daily submission
+2. tester presses `End Drive`
+3. backend stamps `ended_at`
+4. daily submission status changes to `CHECKED_OUT`
+5. audit record is created
+
+## Daily File Upload Flow
+1. tester opens daily submission detail
+2. tester uploads the daily CSV/XLSX file
+3. backend validates extension + MIME and exactly-one-active-file rule
 4. file is stored in Supabase Storage
 5. metadata is stored in `submission_attachments`
 6. audit record is created
 
-## Complete Submission Flow
-1. tester opens `ONGOING` submission
-2. tester confirms values
-3. tester clicks complete
-4. backend checks `pending_grids = 0`
-5. status becomes `COMPLETED`
-6. system computes `file_submission_pending` from status + active attachment count
-7. if `file_submission_pending = true`, tester UI shows warning to upload CSV/XLSX
-8. audit record is created
+## Complete Daily Submission Flow
+1. tester opens `CHECKED_OUT` daily submission
+2. tester enters final `completed_grids`, `skipped_grids`, and `force_tested_grids`
+3. tester confirms the daily closeout file is attached
+4. tester clicks `Complete Submission`
+5. backend validates exactly one active attachment exists
+6. backend validates aggregate child totals do not exceed parent `total_grids`
+7. daily submission status becomes `COMPLETED`
+8. if aggregate workorder totals now equal grand `total_grids`, parent workorder becomes `COMPLETED`
+9. audit record is created
 
-## Admin Review Flow
-1. admin opens submissions table
-2. admin filters by date, zone, shift, status, tester, cluster, ticket, or `file_submission_pending`
-3. admin opens submission detail page
-4. admin reviews values, attachments, and audit history
+## Next Day Continuation Flow
+1. same driver or different driver opens `Start Drive` on a later day
+2. tester enters the same `workorder_code`
+3. backend finds the same active parent workorder by normalized code
+4. backend creates a new daily submission for the new `work_date`
+5. the previous day's submission remains completed; it does not stay open overnight
 
-## Admin Reopen Flow
-1. admin opens completed submission
+## Completed Daily File Change Flow
+1. tester opens a `COMPLETED` daily submission
+2. tester may remove the active file and upload a replacement
+3. backend keeps inactive file metadata for admin-only history
+4. if the active file is removed, daily submission status changes back to `CHECKED_OUT`
+5. if that daily submission was keeping the parent workorder fully closed out, the parent workorder changes back to `ACTIVE`
+6. tester cannot directly edit completed daily submission data fields
+7. if data changes are needed, tester coordinates with admin
+
+## Admin Workorder Review Flow
+1. admin opens workorders table
+2. admin filters by workorder code, region, status, or date range
+3. admin opens workorder detail page
+4. admin reviews parent workorder fields, aggregate progress, child daily submissions, and related audit context
+
+## Admin Daily Submission Review Flow
+1. admin opens daily submissions table
+2. admin filters by date, region, shift, tester, workorder code, submission status, workorder status, ticket, or `file_submission_pending`
+3. admin opens daily submission detail page
+4. admin reviews daily values, active attachment, inactive attachment history, and audit history
+
+## Admin Edit Flow
+1. admin opens any workorder or daily submission
+2. admin updates fields as needed
+3. system writes audit records for the admin edit
+4. parent workorder progress/status is recomputed if child totals changed
+5. testers can see the updated result but do not edit completed daily data directly
+
+## Admin Reopen Daily Submission Flow
+1. admin opens completed daily submission
 2. admin clicks reopen
-3. system changes status to `ONGOING`
+3. system changes daily submission status to `CHECKED_OUT`
 4. reopen metadata is saved
-5. audit record is created
+5. if the parent workorder had been fully complete, it may move back to `ACTIVE`
+6. audit record is created
 
 ## No Submission Yet Flow
 1. admin selects date
-2. system compares approved drive testers to users with at least one submission on that date
-3. admin sees users with no submission yet
+2. system compares approved drive testers to users with at least one daily submission on that date
+3. admin sees users with no daily submission yet
 4. UI clearly states this is not assignment-based
