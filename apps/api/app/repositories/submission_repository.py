@@ -5,7 +5,7 @@ from datetime import date
 
 from sqlalchemy import and_, func, not_, select
 
-from app.core.enums import Shift, SubmissionStatus
+from app.core.enums import Shift, SubmissionStatus, WorkorderStatus
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
@@ -89,6 +89,7 @@ class SubmissionRepository(BaseRepository):
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
+        workorder_status: WorkorderStatus | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -106,6 +107,7 @@ class SubmissionRepository(BaseRepository):
             date_to=date_to,
             status=status,
             shift=shift,
+            workorder_status=workorder_status,
             owner_user_id=owner_user_id,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
@@ -200,6 +202,7 @@ class SubmissionRepository(BaseRepository):
         date_to: date | None,
         status: SubmissionStatus | None,
         shift: Shift | None,
+        workorder_status: WorkorderStatus | None,
         owner_user_id: uuid.UUID | None,
         ticket_number: str | None,
         file_submission_pending: bool | None,
@@ -219,6 +222,15 @@ class SubmissionRepository(BaseRepository):
         if shift is not None:
             items_query = items_query.where(Submission.shift == shift)
             count_query = count_query.where(Submission.shift == shift)
+        if workorder_status is not None:
+            items_query = items_query.where(
+                Submission.workorder_id == Workorder.id,
+                Workorder.status == workorder_status,
+            )
+            count_query = count_query.where(
+                Submission.workorder_id == Workorder.id,
+                Workorder.status == workorder_status,
+            )
         if owner_user_id is not None:
             items_query = items_query.where(Submission.owner_user_id == owner_user_id)
             count_query = count_query.where(Submission.owner_user_id == owner_user_id)

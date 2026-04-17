@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from app.core.enums import Region, WorkorderStatus
+from app.core.errors import AppError, ErrorCode
 from app.core.security import get_current_auth_payload
 
 
@@ -43,8 +44,11 @@ class FakeWorkorderService:
             created_at=now,
             updated_at=now,
         )
+        self.raise_not_found = False
 
     async def lookup_workorder(self, _: dict[str, Any], workorder_code: str) -> FakeWorkorderView:
+        if self.raise_not_found:
+            raise AppError(ErrorCode.WORKORDER_NOT_FOUND, "Workorder not found.", status_code=404)
         return self.workorder
 
 
@@ -105,3 +109,24 @@ def test_lookup_workorder_missing_query_param_returns_422(
     assert response.status_code == 422
     assert body["success"] is False
     assert body["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_lookup_workorder_not_found_returns_404_envelope(
+    client: Any,
+    auth_payload_drive_tester: dict[str, Any],
+    workorder_service: FakeWorkorderService,
+) -> None:
+    from app.api.v1.routers.workorders import get_workorder_service
+
+    workorder_service.raise_not_found = True
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_drive_tester
+    app.dependency_overrides[get_workorder_service] = lambda: workorder_service
+
+    response = client.get("/api/v1/workorders/lookup?workorder_code=GHOST-WO")
+    body = response.json()
+
+    assert response.status_code == 404
+    assert body["success"] is False
+    assert body["error"]["code"] == "WORKORDER_NOT_FOUND"
+    assert "request_id" in body["meta"]

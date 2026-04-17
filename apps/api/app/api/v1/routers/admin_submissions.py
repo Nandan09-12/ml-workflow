@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.enums import Shift, SubmissionStatus
+from app.core.enums import Shift, SubmissionStatus, WorkorderStatus
 from app.core.responses import success_envelope
 from app.core.security import get_current_auth_payload
 from app.db.session import get_db_session
@@ -76,6 +76,7 @@ async def list_admin_submissions(
     date_to: date | None = Query(default=None),
     status: SubmissionStatus | None = Query(default=None),
     shift: Shift | None = Query(default=None),
+    workorder_status: WorkorderStatus | None = Query(default=None),
     owner_user_id: uuid.UUID | None = Query(default=None),
     ticket_number: str | None = Query(default=None),
     file_submission_pending: bool | None = Query(default=None),
@@ -91,6 +92,7 @@ async def list_admin_submissions(
         date_to=date_to,
         status=status,
         shift=shift,
+        workorder_status=workorder_status,
         owner_user_id=owner_user_id,
         ticket_number=ticket_number,
         file_submission_pending=file_submission_pending,

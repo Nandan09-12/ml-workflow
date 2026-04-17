@@ -9,7 +9,7 @@ from app.api.v1.routers.admin_submissions import (
     get_admin_submission_service,
     get_attachment_service,
 )
-from app.core.enums import Shift, SubmissionStatus
+from app.core.enums import Shift, SubmissionStatus, WorkorderStatus
 from app.core.errors import AppError, ErrorCode
 from app.core.security import get_current_auth_payload
 
@@ -91,6 +91,7 @@ class FakeAdminSubmissionService:
         )
         self.raise_admin_only = False
         self.last_file_submission_pending: bool | None = None
+        self.last_workorder_status: WorkorderStatus | None = None
 
     async def reopen_submission(self, _: dict[str, Any], __: uuid.UUID) -> FakeSubmissionView:
         if self.raise_admin_only:
@@ -113,6 +114,7 @@ class FakeAdminSubmissionService:
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
+        workorder_status: WorkorderStatus | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -121,6 +123,7 @@ class FakeAdminSubmissionService:
     ) -> tuple[list[FakeSubmissionView], int]:
         if self.raise_admin_only:
             raise AppError(ErrorCode.ADMIN_ONLY, "Admin access required.", status_code=403)
+        self.last_workorder_status = workorder_status
         self.last_file_submission_pending = file_submission_pending
         return [self.item], 1
 
@@ -218,6 +221,23 @@ def test_admin_submissions_list_success_with_file_pending_filter(
     assert body["data"]["items"][0]["file_submission_pending"] is True
     assert body["data"]["pagination"]["page"] == 1
     assert admin_submission_service.last_file_submission_pending is True
+
+
+def test_admin_submissions_list_success_with_workorder_status_filter(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_submission_service: FakeAdminSubmissionService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_admin_submission_service] = lambda: admin_submission_service
+
+    response = client.get("/api/v1/admin/submissions?workorder_status=COMPLETED")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert admin_submission_service.last_workorder_status == WorkorderStatus.COMPLETED
 
 
 def test_admin_submissions_list_enforces_admin_only_error_envelope(

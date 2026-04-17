@@ -75,6 +75,7 @@ class FakeWorkorderService:
         self.raise_admin_only = False
         self.raise_not_found = False
         self.raise_progress_exceeds = False
+        self.last_list_filters: dict[str, Any] | None = None
 
     async def list_workorders(
         self,
@@ -90,6 +91,15 @@ class FakeWorkorderService:
     ) -> tuple[list[FakeWorkorderView], int]:
         if self.raise_admin_only:
             raise AppError(ErrorCode.ADMIN_ONLY, "Admin access required.", status_code=403)
+        self.last_list_filters = {
+            "region": region,
+            "status": status,
+            "workorder_code": workorder_code,
+            "date_from": date_from,
+            "date_to": date_to,
+            "page": page,
+            "page_size": page_size,
+        }
         return [self.view], 1
 
     async def get_workorder_admin(
@@ -179,6 +189,40 @@ def test_list_workorders_enforces_admin_only(
     assert response.status_code == 403
     assert body["success"] is False
     assert body["error"]["code"] == "ADMIN_ONLY"
+
+
+def test_list_workorders_passes_filters_to_service(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    workorder_service: FakeWorkorderService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_workorder_service] = lambda: workorder_service
+
+    response = client.get(
+        "/api/v1/admin/workorders"
+        "?region=NE_UP"
+        "&status=ACTIVE"
+        "&workorder_code=WO-ALPHA"
+        "&date_from=2026-04-01"
+        "&date_to=2026-04-30"
+        "&page=2"
+        "&page_size=10"
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert workorder_service.last_list_filters == {
+        "region": Region.NE_UP,
+        "status": WorkorderStatus.ACTIVE,
+        "workorder_code": "WO-ALPHA",
+        "date_from": __import__("datetime").date(2026, 4, 1),
+        "date_to": __import__("datetime").date(2026, 4, 30),
+        "page": 2,
+        "page_size": 10,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -145,6 +145,7 @@ class FakeSubmissionRepository:
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
+        workorder_status: WorkorderStatus | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -162,6 +163,13 @@ class FakeSubmissionRepository:
             items = [submission for submission in items if submission.status == status]
         if shift is not None:
             items = [submission for submission in items if submission.shift == shift]
+        if workorder_status is not None:
+            items = [
+                submission
+                for submission in items
+                if (workorder := self.workorders.get(submission.workorder_id)) is not None
+                and workorder.status == workorder_status
+            ]
         if owner_user_id is not None:
             items = [submission for submission in items if submission.owner_user_id == owner_user_id]
         if ticket_number is not None:
@@ -1137,6 +1145,27 @@ async def test_get_admin_submission_includes_workorder_summary() -> None:
 
     assert view.workorder_summary is not None
     assert view.workorder_summary.total_grids == 8
+
+
+async def test_list_admin_submissions_filters_by_workorder_status() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    active_workorder = _workorder(repo.owner_user.id, total_grids=10, status=WorkorderStatus.ACTIVE)
+    completed_workorder = _workorder(repo.owner_user.id, total_grids=10, status=WorkorderStatus.COMPLETED)
+    active_submission = _submission(repo.owner_user.id, workorder_id=active_workorder.id)
+    completed_submission = _submission(repo.owner_user.id, workorder_id=completed_workorder.id)
+    repo.workorders[active_workorder.id] = active_workorder
+    repo.workorders[completed_workorder.id] = completed_workorder
+    repo.submissions.extend([active_submission, completed_submission])
+
+    views, total = await service.list_admin_submissions(
+        _auth_payload(repo.admin_user),
+        workorder_status=WorkorderStatus.COMPLETED,
+    )
+
+    assert total == 1
+    assert len(views) == 1
+    assert views[0].workorder_id == completed_workorder.id
 
 
 # ---------------------------------------------------------------------------
