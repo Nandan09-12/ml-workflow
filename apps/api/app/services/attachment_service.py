@@ -72,7 +72,7 @@ class AttachmentRepositoryProtocol(Protocol):
 
 class AttachmentService:
     MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
-    MAX_ACTIVE_ATTACHMENTS = 5
+    MAX_ACTIVE_ATTACHMENTS = 1
     DOWNLOAD_URL_EXPIRY_SECONDS = 3600
 
     ALLOWED_EXTENSIONS = {".csv", ".xlsx"}

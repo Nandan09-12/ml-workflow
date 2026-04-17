@@ -281,22 +281,21 @@ async def test_upload_attachment_rejects_when_active_count_reaches_limit() -> No
     storage = FakeAttachmentStorage()
     service = AttachmentService(repository=repo, storage=storage, settings=_settings())
     now = datetime.now(UTC)
-    for idx in range(5):
-        repo.attachments.append(
-            SubmissionAttachment(
-                id=uuid.uuid4(),
-                submission_id=repo.submission.id,
-                file_name=f"old-{idx}.csv",
-                bucket_name="attachments",
-                object_path=f"{repo.submission.id}/old-{idx}.csv",
-                mime_type="text/csv",
-                file_extension=".csv",
-                file_size_bytes=128,
-                uploaded_by_user_id=repo.owner_user.id,
-                uploaded_at=now,
-                is_active=True,
-            )
+    repo.attachments.append(
+        SubmissionAttachment(
+            id=uuid.uuid4(),
+            submission_id=repo.submission.id,
+            file_name="old-0.csv",
+            bucket_name="attachments",
+            object_path=f"{repo.submission.id}/old-0.csv",
+            mime_type="text/csv",
+            file_extension=".csv",
+            file_size_bytes=128,
+            uploaded_by_user_id=repo.owner_user.id,
+            uploaded_at=now,
+            is_active=True,
         )
+    )
 
     with pytest.raises(AppError) as exc:
         await service.upload_attachment(
@@ -307,6 +306,7 @@ async def test_upload_attachment_rejects_when_active_count_reaches_limit() -> No
 
     assert exc.value.code.value == "VALIDATION_ERROR"
     assert exc.value.status_code == 400
+    assert exc.value.details == {"max_active_attachments": 1}
 
 
 async def test_upload_attachment_allows_admin_on_foreign_submission() -> None:

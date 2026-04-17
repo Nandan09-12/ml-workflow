@@ -19,6 +19,12 @@ class Zone(StrEnum):
     SOUTH_FLORIDA = "SOUTH_FLORIDA"
 
 
+class Region(StrEnum):
+    NE_UP = "NE_UP"
+    CENTRAL = "CENTRAL"
+    SOUTH_FLORIDA = "SOUTH_FLORIDA"
+
+
 class Shift(StrEnum):
     AM = "AM"
     PM = "PM"
@@ -26,6 +32,11 @@ class Shift(StrEnum):
 
 class SubmissionStatus(StrEnum):
     ONGOING = "ONGOING"
+    COMPLETED = "COMPLETED"
+
+
+class WorkorderStatus(StrEnum):
+    ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
 
 

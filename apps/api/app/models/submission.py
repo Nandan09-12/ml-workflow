@@ -23,11 +23,17 @@ if TYPE_CHECKING:
     from app.models.app_user import AppUser
     from app.models.submission_attachment import SubmissionAttachment
     from app.models.submission_audit_log import SubmissionAuditLog
+    from app.models.workorder import Workorder
 
 
 class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (
+        UniqueConstraint(
+            "workorder_id",
+            "work_date",
+            name="uq_submissions_workorder_date",
+        ),
         UniqueConstraint(
             "owner_user_id",
             "work_date",
@@ -61,6 +67,11 @@ class Submission(Base):
         unique=True,
         nullable=False,
         default=uuid.uuid4,
+    )
+    workorder_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workorders.id"),
+        nullable=True,
     )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -125,6 +136,10 @@ class Submission(Base):
         "AppUser",
         back_populates="submissions_owned",
         foreign_keys=[owner_user_id],
+    )
+    workorder: Mapped["Workorder | None"] = relationship(
+        "Workorder",
+        back_populates="submissions",
     )
     attachments: Mapped[list["SubmissionAttachment"]] = relationship(
         "SubmissionAttachment",

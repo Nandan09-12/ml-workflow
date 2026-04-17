@@ -2,7 +2,7 @@ import ssl
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import AnyHttpUrl, SecretStr, model_validator
+from pydantic import AnyHttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DatabaseSSLMode = Literal["disable", "require", "verify-ca", "verify-full"]
@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     supabase_service_role_key: SecretStr | None = None
     supabase_storage_bucket: str = "attachments"
     bootstrap_admin_emails: str = ""
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug_value(cls, value: Any) -> Any:
+        if isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug", "development"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "prod", "production"}:
+                return False
+        return value
 
     @model_validator(mode="after")
     def validate_environment_security(self) -> "Settings":

@@ -63,6 +63,17 @@ def test_settings_build_connect_args_for_ssl_verify_full_mode() -> None:
     assert ssl_ctx.check_hostname is True
 
 
+def test_settings_accept_release_style_debug_strings() -> None:
+    settings = Settings(
+        app_env="development",
+        debug="release",
+        database_url="postgresql+asyncpg://postgres:postgres@localhost/postgres",
+        database_ssl_mode="require",
+    )
+
+    assert settings.debug is False
+
+
 async def test_http_exception_400_maps_to_bad_request_code() -> None:
     response = await http_exception_handler(_request(), HTTPException(status_code=400, detail="Bad request."))
     payload = json.loads(response.body)
@@ -77,4 +88,3 @@ async def test_http_exception_409_maps_to_conflict_code() -> None:
 
     assert response.status_code == 409
     assert payload["error"]["code"] == "CONFLICT"
-
