@@ -18,6 +18,29 @@ from app.models import workorder as _workorder  # noqa: F401
 RUN_INTEGRATION_TESTS = os.getenv("RUN_INTEGRATION_TESTS") == "1"
 INTEGRATION_DATABASE_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
+
+def _integration_connect_args() -> dict[str, object]:
+    ssl_mode = os.getenv("INTEGRATION_DATABASE_SSL_MODE", "disable").strip().lower()
+    ssl_root_cert = os.getenv("INTEGRATION_DATABASE_SSL_ROOT_CERT")
+    if ssl_mode == "disable":
+        return {}
+
+    ssl_context = ssl.create_default_context(cafile=ssl_root_cert)
+    if ssl_mode == "require":
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+    elif ssl_mode == "verify-ca":
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+    elif ssl_mode == "verify-full":
+        ssl_context.check_hostname = True
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+    else:
+        raise ValueError(
+            "INTEGRATION_DATABASE_SSL_MODE must be one of: disable, require, verify-ca, verify-full"
+        )
+    return {"ssl": ssl_context}
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     if RUN_INTEGRATION_TESTS and INTEGRATION_DATABASE_URL:
         return
@@ -40,16 +63,16 @@ async def integration_session() -> AsyncGenerator[AsyncSession, None]:
         )
 
     schema_name = f"it_{uuid.uuid4().hex[:10]}"
-    _ssl_ctx = ssl.create_default_context()
-    _ssl_ctx.check_hostname = False
-    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    connect_args = _integration_connect_args()
     admin_engine = create_async_engine(
         INTEGRATION_DATABASE_URL,
-        connect_args={"ssl": _ssl_ctx},
+        connect_args=connect_args,
     )
+    test_connect_args = dict(connect_args)
+    test_connect_args["server_settings"] = {"search_path": schema_name}
     test_engine = create_async_engine(
         INTEGRATION_DATABASE_URL,
-        connect_args={"ssl": _ssl_ctx, "server_settings": {"search_path": schema_name}},
+        connect_args=test_connect_args,
     )
     session_factory = async_sessionmaker(
         bind=test_engine,

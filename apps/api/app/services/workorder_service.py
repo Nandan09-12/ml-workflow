@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.enums import (
     AccountStatus,
     AuditActionType,
@@ -118,119 +120,166 @@ class WorkorderService:
         request: StartDriveRequest,
     ) -> SubmissionWithWorkorderView:
         actor = await self._require_approved_user(auth_payload)
+        actor_id = actor.id
+        actor_full_name = actor.full_name
+        actor_email = actor.email
+        actor_role = (
+            actor.approved_role.value
+            if actor.approved_role is not None
+            else actor.requested_role.value
+        )
         normalized = self.normalize_code(request.workorder_code)
 
-        async with self._repository.transaction():
-            workorder = await self._repository.get_workorder_by_normalized_code(normalized)
+        created: Submission | None = None
+        workorder: Workorder | None = None
+        for attempt in range(2):
+            try:
+                async with self._repository.transaction():
+                    workorder = await self._repository.get_workorder_by_normalized_code(
+                        normalized
+                    )
 
-            if workorder is None:
-                # Creating a new workorder — region and total_grids are required
-                if request.region is None:
-                    raise AppError(
-                        ErrorCode.WORKORDER_REGION_MISMATCH,
-                        "region is required when creating a new workorder.",
-                        status_code=400,
+                    if workorder is None:
+                        if request.region is None:
+                            raise AppError(
+                                ErrorCode.WORKORDER_REGION_MISMATCH,
+                                "region is required when creating a new workorder.",
+                                status_code=400,
+                            )
+                        if request.total_grids is None:
+                            raise AppError(
+                                ErrorCode.WORKORDER_TOTAL_GRIDS_MISMATCH,
+                                "total_grids is required when creating a new workorder.",
+                                status_code=400,
+                            )
+                        now = datetime.now(UTC)
+                        workorder = Workorder(
+                            id=uuid.uuid4(),
+                            workorder_code=request.workorder_code.strip(),
+                            workorder_code_normalized=normalized,
+                            region=request.region,
+                            total_grids=request.total_grids,
+                            status=WorkorderStatus.ACTIVE,
+                            created_at=now,
+                            created_by_user_id=actor_id,
+                            updated_at=now,
+                            updated_by_user_id=actor_id,
+                            completed_at=None,
+                            completed_by_user_id=None,
+                        )
+                        workorder = await self._repository.create_workorder(workorder)
+                    else:
+                        if workorder.status == WorkorderStatus.COMPLETED:
+                            raise AppError(
+                                ErrorCode.WORKORDER_ALREADY_COMPLETED,
+                                "Cannot start a drive for a completed workorder.",
+                                status_code=400,
+                            )
+                        if (
+                            request.region is not None
+                            and request.region != workorder.region
+                        ):
+                            raise AppError(
+                                ErrorCode.WORKORDER_REGION_MISMATCH,
+                                "Provided region does not match the existing workorder.",
+                                status_code=409,
+                            )
+                        if (
+                            request.total_grids is not None
+                            and request.total_grids != workorder.total_grids
+                        ):
+                            raise AppError(
+                                ErrorCode.WORKORDER_TOTAL_GRIDS_MISMATCH,
+                                "Provided total_grids does not match the existing workorder.",
+                                status_code=409,
+                            )
+
+                    today = self._today_for_region(workorder.region)
+                    if request.work_date > today:
+                        raise AppError(
+                            ErrorCode.VALIDATION_ERROR,
+                            "work_date cannot be in the future.",
+                            status_code=422,
+                        )
+
+                    duplicate = await self._repository.get_submission_by_workorder_date(
+                        workorder_id=workorder.id,
+                        work_date=request.work_date,
                     )
-                if request.total_grids is None:
-                    raise AppError(
-                        ErrorCode.WORKORDER_TOTAL_GRIDS_MISMATCH,
-                        "total_grids is required when creating a new workorder.",
-                        status_code=400,
+                    if duplicate is not None:
+                        raise AppError(
+                            ErrorCode.SUBMISSION_ALREADY_EXISTS,
+                            "A submission already exists for this workorder on that date.",
+                            status_code=409,
+                        )
+
+                    now = datetime.now(UTC)
+                    submission = Submission(
+                        id=uuid.uuid4(),
+                        client_generated_id=(
+                            request.client_generated_id or uuid.uuid4()
+                        ),
+                        workorder_id=workorder.id,
+                        owner_user_id=actor_id,
+                        submitter_name_snapshot=actor_full_name,
+                        submitter_email_snapshot=actor_email,
+                        work_date=request.work_date,
+                        shift=request.shift,
+                        team_number=_normalize_optional_text(request.team_number),
+                        ticket_number=_normalize_optional_text(request.ticket_number),
+                        skipped_grids=0,
+                        force_tested_grids=0,
+                        completed_grids=0,
+                        status=SubmissionStatus.IN_PROGRESS,
+                        started_at=now,
+                        ended_at=None,
+                        created_at=now,
+                        created_by_user_id=actor_id,
+                        updated_at=now,
+                        updated_by_user_id=actor_id,
+                        completed_at=None,
+                        completed_by_user_id=None,
+                        reopened_at=None,
+                        reopened_by_user_id=None,
+                        version_number=1,
                     )
-                now = datetime.now(UTC)
-                workorder = Workorder(
-                    id=uuid.uuid4(),
-                    workorder_code=request.workorder_code.strip(),
-                    workorder_code_normalized=normalized,
-                    region=request.region,
-                    total_grids=request.total_grids,
-                    status=WorkorderStatus.ACTIVE,
-                    created_at=now,
-                    created_by_user_id=actor.id,
-                    updated_at=now,
-                    updated_by_user_id=actor.id,
-                    completed_at=None,
-                    completed_by_user_id=None,
-                )
-                workorder = await self._repository.create_workorder(workorder)
-            else:
-                # Attaching to existing — validate provided fields match
-                if workorder.status == WorkorderStatus.COMPLETED:
-                    raise AppError(
-                        ErrorCode.WORKORDER_ALREADY_COMPLETED,
-                        "Cannot start a drive for a completed workorder.",
-                        status_code=400,
+                    created = await self._repository.create_submission(submission)
+                    await self._repository.create_audit_log(
+                        _build_audit_log(
+                            submission_id=created.id,
+                            action_type=AuditActionType.CREATED,
+                            actor_user_id=actor_id,
+                            actor_role=actor_role,
+                            changed_fields=[
+                                "workorder_id",
+                                "work_date",
+                                "shift",
+                                "status",
+                                "started_at",
+                            ],
+                        )
                     )
-                if request.region is not None and request.region != workorder.region:
+                break
+            except IntegrityError as exc:
+                constraint_name = _extract_constraint_name(exc)
+                if (
+                    constraint_name == "uq_workorders_code_normalized"
+                    and attempt == 0
+                ):
+                    continue
+                if constraint_name == "uq_submissions_workorder_date":
                     raise AppError(
-                        ErrorCode.WORKORDER_REGION_MISMATCH,
-                        "Provided region does not match the existing workorder.",
+                        ErrorCode.SUBMISSION_ALREADY_EXISTS,
+                        "A submission already exists for this workorder on that date.",
                         status_code=409,
-                    )
-                if request.total_grids is not None and request.total_grids != workorder.total_grids:
-                    raise AppError(
-                        ErrorCode.WORKORDER_TOTAL_GRIDS_MISMATCH,
-                        "Provided total_grids does not match the existing workorder.",
-                        status_code=409,
-                    )
+                    ) from exc
+                raise
 
-            # Future work_date guard
-            today = self._today_for_region(workorder.region)
-            if request.work_date > today:
-                raise AppError(
-                    ErrorCode.VALIDATION_ERROR,
-                    "work_date cannot be in the future.",
-                    status_code=422,
-                )
-
-            # Check for duplicate submission on same workorder+date
-            duplicate = await self._repository.get_submission_by_workorder_date(
-                workorder_id=workorder.id,
-                work_date=request.work_date,
-            )
-            if duplicate is not None:
-                raise AppError(
-                    ErrorCode.SUBMISSION_ALREADY_EXISTS,
-                    "A submission already exists for this workorder on that date.",
-                    status_code=409,
-                )
-
-            now = datetime.now(UTC)
-            submission = Submission(
-                id=uuid.uuid4(),
-                client_generated_id=request.client_generated_id or uuid.uuid4(),
-                workorder_id=workorder.id,
-                owner_user_id=actor.id,
-                submitter_name_snapshot=actor.full_name,
-                submitter_email_snapshot=actor.email,
-                work_date=request.work_date,
-                shift=request.shift,
-                team_number=_normalize_optional_text(request.team_number),
-                ticket_number=_normalize_optional_text(request.ticket_number),
-                skipped_grids=0,
-                force_tested_grids=0,
-                completed_grids=0,
-                status=SubmissionStatus.IN_PROGRESS,
-                started_at=now,
-                ended_at=None,
-                created_at=now,
-                created_by_user_id=actor.id,
-                updated_at=now,
-                updated_by_user_id=actor.id,
-                completed_at=None,
-                completed_by_user_id=None,
-                reopened_at=None,
-                reopened_by_user_id=None,
-                version_number=1,
-            )
-            created = await self._repository.create_submission(submission)
-            await self._repository.create_audit_log(
-                _build_audit_log(
-                    submission_id=created.id,
-                    action_type=AuditActionType.CREATED,
-                    actor=actor,
-                    changed_fields=["workorder_id", "work_date", "shift", "status", "started_at"],
-                )
+        if created is None or workorder is None:
+            raise AppError(
+                ErrorCode.CONFLICT,
+                "The workorder changed concurrently. Retry the request.",
+                status_code=409,
             )
 
         agg = await self._repository.get_aggregate_progress(workorder.id)
@@ -308,37 +357,57 @@ class WorkorderService:
         request: UpdateWorkorderRequest,
     ) -> WorkorderView:
         actor = await self._require_approved_admin(auth_payload)
-        workorder = await self._repository.get_workorder_by_id(workorder_id)
-        if workorder is None:
-            raise AppError(
-                ErrorCode.WORKORDER_NOT_FOUND,
-                "Workorder not found.",
-                status_code=404,
-            )
+        try:
+            async with self._repository.transaction():
+                workorder = await self._repository.get_workorder_by_id(workorder_id)
+                if workorder is None:
+                    raise AppError(
+                        ErrorCode.WORKORDER_NOT_FOUND,
+                        "Workorder not found.",
+                        status_code=404,
+                    )
 
-        if request.total_grids is not None:
-            completed_grids, skipped_grids = await self._repository.get_aggregate_progress(workorder.id)
-            if request.total_grids < completed_grids + skipped_grids:
-                raise AppError(
-                    ErrorCode.WORKORDER_PROGRESS_EXCEEDS_TOTAL,
-                    "total_grids cannot be less than current aggregate progress.",
-                    status_code=400,
+                completed_grids, skipped_grids = (
+                    await self._repository.get_aggregate_progress(workorder.id)
                 )
-            workorder.total_grids = request.total_grids
+                aggregate_total = completed_grids + skipped_grids
 
-        if request.region is not None:
-            workorder.region = request.region
+                if request.total_grids is not None:
+                    if request.total_grids < aggregate_total:
+                        raise AppError(
+                            ErrorCode.WORKORDER_PROGRESS_EXCEEDS_TOTAL,
+                            "total_grids cannot be less than current aggregate progress.",
+                            status_code=400,
+                        )
+                    workorder.total_grids = request.total_grids
 
-        if request.workorder_code is not None:
-            normalized = self.normalize_code(request.workorder_code)
-            workorder.workorder_code = request.workorder_code
-            workorder.workorder_code_normalized = normalized
+                if request.region is not None:
+                    workorder.region = request.region
 
-        now = datetime.now(UTC)
-        workorder.updated_at = now
-        workorder.updated_by_user_id = actor.id
-        saved = await self._repository.save_workorder(workorder)
-        agg = await self._repository.get_aggregate_progress(saved.id)
+                if request.workorder_code is not None:
+                    normalized = self.normalize_code(request.workorder_code)
+                    workorder.workorder_code = request.workorder_code
+                    workorder.workorder_code_normalized = normalized
+
+                _reconcile_workorder_status_for_admin_edit(
+                    workorder,
+                    aggregate_total=aggregate_total,
+                    actor_id=actor.id,
+                )
+
+                now = datetime.now(UTC)
+                workorder.updated_at = now
+                workorder.updated_by_user_id = actor.id
+                saved = await self._repository.save_workorder(workorder)
+                agg = await self._repository.get_aggregate_progress(saved.id)
+        except IntegrityError as exc:
+            if _extract_constraint_name(exc) == "uq_workorders_code_normalized":
+                raise AppError(
+                    ErrorCode.CONFLICT,
+                    "A workorder with that normalized code already exists.",
+                    status_code=409,
+                ) from exc
+            raise
         return _to_workorder_view(saved, agg)
 
     async def maybe_auto_complete_workorder(
@@ -411,25 +480,66 @@ def _build_audit_log(
     *,
     submission_id: uuid.UUID,
     action_type: AuditActionType,
-    actor: AppUser,
+    actor_user_id: uuid.UUID,
+    actor_role: str,
     changed_fields: list[str] | None = None,
 ) -> SubmissionAuditLog:
     return SubmissionAuditLog(
         id=uuid.uuid4(),
         submission_id=submission_id,
         action_type=action_type,
-        actor_user_id=actor.id,
-        actor_role=(
-            actor.approved_role.value
-            if actor.approved_role is not None
-            else actor.requested_role.value
-        ),
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
         source=AuditSource.WEB,
         changed_fields_json={"fields": changed_fields} if changed_fields else None,
         before_snapshot_json=None,
         after_snapshot_json=None,
         created_at=datetime.now(UTC),
     )
+
+
+def _extract_constraint_name(exc: IntegrityError) -> str | None:
+    original = getattr(exc, "orig", None)
+    if original is None:
+        return None
+
+    diag = getattr(original, "diag", None)
+    if diag is not None:
+        constraint_name = getattr(diag, "constraint_name", None)
+        if constraint_name:
+            return str(constraint_name)
+
+    constraint_name = getattr(original, "constraint_name", None)
+    if constraint_name:
+        return str(constraint_name)
+
+    message = str(original)
+    for known_name in (
+        "uq_workorders_code_normalized",
+        "uq_submissions_workorder_date",
+    ):
+        if known_name in message:
+            return known_name
+    return None
+
+
+def _reconcile_workorder_status_for_admin_edit(
+    workorder: Workorder,
+    *,
+    aggregate_total: int,
+    actor_id: uuid.UUID,
+) -> None:
+    now = datetime.now(UTC)
+    if aggregate_total >= workorder.total_grids:
+        workorder.status = WorkorderStatus.COMPLETED
+        if workorder.completed_at is None:
+            workorder.completed_at = now
+            workorder.completed_by_user_id = actor_id
+        return
+
+    workorder.status = WorkorderStatus.ACTIVE
+    workorder.completed_at = None
+    workorder.completed_by_user_id = None
 
 
 def _to_workorder_summary(workorder: Workorder, aggregate: tuple[int, int]) -> WorkorderSummary:

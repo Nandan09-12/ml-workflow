@@ -139,7 +139,7 @@ class FakeReportingRepository:
                     "skipped_grids": 1,
                     "force_tested_grids": 0,
                     "completed_grids": 9,
-                    "status": SubmissionStatus.COMPLETED,
+                    "status": SubmissionStatus.CHECKED_OUT,
                     "version_number": 2,
                     "started_at": now,
                     "ended_at": now,
@@ -232,7 +232,7 @@ async def test_export_submissions_csv_uses_filter_model() -> None:
     csv_text = await service.export_submissions_csv(
         _auth_payload(repo.admin_user),
         work_date=date(2026, 4, 14),
-        status=SubmissionStatus.COMPLETED,
+        status=SubmissionStatus.CHECKED_OUT,
         shift=Shift.AM,
         owner_user_id=repo.tester_user.id,
         ticket_number="TKT",
@@ -242,7 +242,7 @@ async def test_export_submissions_csv_uses_filter_model() -> None:
     reader = csv.DictReader(io.StringIO(csv_text))
     rows = list(reader)
     assert len(rows) == 1
-    assert rows[0]["status"] == "COMPLETED"
+    assert rows[0]["status"] == "CHECKED_OUT"
     assert rows[0]["file_submission_pending"] == "true"
     assert repo.last_export_filters is not None
     assert repo.last_export_filters["file_submission_pending"] is True

@@ -22,6 +22,7 @@ V1 includes the **DT Check-in** module for drive testers and admins.
 - `docs/TASKS.md`
 - `docs/CODEX_HANDOFF.md`
 - `docs/BACKEND_MIGRATION_POLICY.md`
+- `docs/TESTING.md`
 
 ## V1 Summary
 
@@ -87,6 +88,17 @@ GET http://localhost:8000/api/v1/health
   ```
 - Opt-in integration tests:
   ```bash
+  docker compose -f docker-compose.integration.yml up -d integration-db
   cd apps/api
-  RUN_INTEGRATION_TESTS=1 INTEGRATION_DATABASE_URL=<test-db-url> PYTHONPATH=. pytest tests/integration
+  RUN_INTEGRATION_TESTS=1 INTEGRATION_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/ml_workflow_integration INTEGRATION_DATABASE_SSL_MODE=disable PYTHONPATH=. pytest tests/integration
+  docker compose -f docker-compose.integration.yml down
   ```
+
+## Integration DB
+- dedicated Docker stack file: `docker-compose.integration.yml`
+- default local Postgres port: `5433`
+- example env template: `apps/api/.env.integration.example`
+- integration tests run against one Postgres instance and isolate each test with a temporary schema
+- this setup does not change the normal API dev workflow in `docker-compose.yml`
+- backend testing strategy and scenario sources are documented in `docs/TESTING.md`
+
