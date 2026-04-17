@@ -14,6 +14,8 @@ class FakeDashboardSummaryView:
     ongoing_submissions: int
     completed_submissions: int
     no_submission_yet: int
+    active_workorders: int
+    completed_workorders: int
     reference_date: date
     date_from: date | None
     date_to: date | None
@@ -33,6 +35,8 @@ class FakeReportingService:
             ongoing_submissions=5,
             completed_submissions=7,
             no_submission_yet=3,
+            active_workorders=4,
+            completed_workorders=2,
             reference_date=date(2026, 4, 14),
             date_from=None,
             date_to=None,
@@ -43,8 +47,8 @@ class FakeReportingService:
             email="nosubmit@example.com",
         )
         self.csv_content = (
-            "submission_id,submitter_email,status,file_submission_pending\n"
-            "11111111-1111-1111-1111-111111111111,tester@example.com,COMPLETED,true\n"
+            "submission_id,submitter_email,status,file_submission_pending,workorder_code,workorder_region,workorder_status,workorder_progress_percent\n"
+            "11111111-1111-1111-1111-111111111111,tester@example.com,COMPLETED,true,WO-001,NE_UP,ACTIVE,40.0\n"
         )
         self.raise_admin_only = False
         self.last_export_filters: dict[str, Any] | None = None
@@ -133,6 +137,8 @@ def test_dashboard_summary_success_envelope(
     assert body["success"] is True
     assert body["data"]["approved_drive_testers"] == 12
     assert body["data"]["no_submission_yet"] == 3
+    assert body["data"]["active_workorders"] == 4
+    assert body["data"]["completed_workorders"] == 2
     assert service.last_work_date == date(2026, 4, 14)
 
 
@@ -188,7 +194,25 @@ def test_export_submissions_csv_returns_stream_response(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
     assert "attachment;" in response.headers.get("content-disposition", "")
-    assert "submission_id,submitter_email,status,file_submission_pending" in response.text
+    assert "submission_id,submitter_email,status,file_submission_pending,workorder_code,workorder_region,workorder_status,workorder_progress_percent" in response.text
     assert service.last_export_filters is not None
     assert service.last_export_filters["file_submission_pending"] is True
+
+
+def test_export_submissions_csv_includes_workorder_columns_in_http_response(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+) -> None:
+    service = FakeReportingService()
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_reporting_service] = lambda: service
+
+    response = client.get("/api/v1/admin/reports/submissions/export")
+
+    assert response.status_code == 200
+    assert "workorder_code" in response.text
+    assert "workorder_region" in response.text
+    assert "workorder_status" in response.text
+    assert "workorder_progress_percent" in response.text
 

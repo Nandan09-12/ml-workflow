@@ -20,6 +20,7 @@ from app.models.submission import Submission
 from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.workorder import Workorder
 from app.schemas.submissions import CreateSubmissionRequest, UpdateSubmissionRequest
+from app.schemas.workorders import WorkorderSummary
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class SubmissionView:
     created_at: datetime
     updated_at: datetime
     file_submission_pending: bool
+    workorder_summary: WorkorderSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,7 @@ class SubmissionRepositoryProtocol(Protocol):
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
+        workorder_status: WorkorderStatus | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -282,8 +285,22 @@ class SubmissionService:
 
         submission_ids = [submission.id for submission in submissions]
         attachment_counts = await self._repository.count_active_attachments_for_submissions(submission_ids)
+
+        workorder_ids = list({s.workorder_id for s in submissions})
+        workorders_map = await self._repository.get_workorders_by_ids(workorder_ids)
+        agg_map = await self._repository.get_aggregate_progress_batch(workorder_ids)
+
         views = [
-            self._to_view(submission, active_attachment_count=attachment_counts.get(submission.id, 0))
+            self._to_view(
+                submission,
+                active_attachment_count=attachment_counts.get(submission.id, 0),
+                workorder_summary=self._to_workorder_summary(
+                    workorders_map[submission.workorder_id],
+                    agg_map.get(submission.workorder_id, (0, 0)),
+                )
+                if submission.workorder_id in workorders_map
+                else None,
+            )
             for submission in submissions
         ]
         return views, total
@@ -299,7 +316,12 @@ class SubmissionService:
             raise AppError(ErrorCode.NOT_FOUND, "Submission was not found.", status_code=404)
         self._assert_owner(actor, submission)
         active_attachments = await self._repository.count_active_attachments(submission.id)
-        return self._to_view(submission, active_attachment_count=active_attachments)
+        workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+        workorder_summary: WorkorderSummary | None = None
+        if workorder is not None:
+            agg = await self._repository.get_aggregate_progress(submission.workorder_id)
+            workorder_summary = self._to_workorder_summary(workorder, agg)
+        return self._to_view(submission, active_attachment_count=active_attachments, workorder_summary=workorder_summary)
 
     async def update_submission(
         self,
@@ -513,6 +535,7 @@ class SubmissionService:
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
+        workorder_status: WorkorderStatus | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -527,6 +550,7 @@ class SubmissionService:
             date_to=date_to,
             status=status,
             shift=shift,
+            workorder_status=workorder_status,
             owner_user_id=owner_user_id,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
@@ -535,8 +559,22 @@ class SubmissionService:
         )
         submission_ids = [submission.id for submission in submissions]
         attachment_counts = await self._repository.count_active_attachments_for_submissions(submission_ids)
+
+        workorder_ids = list({s.workorder_id for s in submissions})
+        workorders_map = await self._repository.get_workorders_by_ids(workorder_ids)
+        agg_map = await self._repository.get_aggregate_progress_batch(workorder_ids)
+
         views = [
-            self._to_view(submission, active_attachment_count=attachment_counts.get(submission.id, 0))
+            self._to_view(
+                submission,
+                active_attachment_count=attachment_counts.get(submission.id, 0),
+                workorder_summary=self._to_workorder_summary(
+                    workorders_map[submission.workorder_id],
+                    agg_map.get(submission.workorder_id, (0, 0)),
+                )
+                if submission.workorder_id in workorders_map
+                else None,
+            )
             for submission in submissions
         ]
         return views, total
@@ -551,7 +589,12 @@ class SubmissionService:
         if submission is None:
             raise AppError(ErrorCode.NOT_FOUND, "Submission was not found.", status_code=404)
         active_attachments = await self._repository.count_active_attachments(submission.id)
-        return self._to_view(submission, active_attachment_count=active_attachments)
+        workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+        workorder_summary: WorkorderSummary | None = None
+        if workorder is not None:
+            agg = await self._repository.get_aggregate_progress(submission.workorder_id)
+            workorder_summary = self._to_workorder_summary(workorder, agg)
+        return self._to_view(submission, active_attachment_count=active_attachments, workorder_summary=workorder_summary)
 
     async def update_admin_submission(
         self,
@@ -602,6 +645,19 @@ class SubmissionService:
                         changed_fields=sorted(changed_fields),
                     )
                 )
+
+                # Auto-complete parent workorder if aggregate meets total
+                workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+                if workorder is not None and workorder.status != WorkorderStatus.COMPLETED:
+                    agg = await self._repository.get_aggregate_progress(submission.workorder_id)
+                    if agg[0] + agg[1] >= workorder.total_grids:
+                        now2 = datetime.now(UTC)
+                        workorder.status = WorkorderStatus.COMPLETED
+                        workorder.completed_at = now2
+                        workorder.completed_by_user_id = actor.id
+                        workorder.updated_at = now2
+                        workorder.updated_by_user_id = actor.id
+                        await self._repository.save_workorder(workorder)
 
         active_attachments = await self._repository.count_active_attachments(submission.id)
         return self._to_view(submission, active_attachment_count=active_attachments)
@@ -782,6 +838,7 @@ class SubmissionService:
         submission: Submission,
         *,
         active_attachment_count: int,
+        workorder_summary: WorkorderSummary | None = None,
     ) -> SubmissionView:
         return SubmissionView(
             id=submission.id,
@@ -807,6 +864,26 @@ class SubmissionService:
                 status=submission.status,
                 active_attachment_count=active_attachment_count,
             ),
+            workorder_summary=workorder_summary,
+        )
+
+    @staticmethod
+    def _to_workorder_summary(
+        workorder: Workorder, aggregate: tuple[int, int]
+    ) -> WorkorderSummary:
+        completed_grids, skipped_grids = aggregate
+        done = completed_grids + skipped_grids
+        remaining = max(workorder.total_grids - done, 0)
+        progress = (done / workorder.total_grids * 100) if workorder.total_grids > 0 else 0.0
+        return WorkorderSummary(
+            workorder_code=workorder.workorder_code,
+            region=workorder.region,
+            status=workorder.status,
+            total_grids=workorder.total_grids,
+            completed_grids=completed_grids,
+            skipped_grids=skipped_grids,
+            remaining_grids=remaining,
+            progress_percent=round(progress, 2),
         )
 
     @staticmethod

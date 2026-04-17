@@ -4,10 +4,17 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
+from app.core.enums import (
+    AccountStatus,
+    RequestedRole,
+    Shift,
+    SubmissionStatus,
+    WorkorderStatus,
+)
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
+from app.models.workorder import Workorder
 from app.repositories.base import BaseRepository
 from app.repositories.submission_repository import SubmissionRepository
 
@@ -133,6 +140,28 @@ class ReportingRepository(BaseRepository):
         for submission_id, count in result.all():
             counts[submission_id] = int(count)
         return counts
+
+    async def count_workorders_by_status(self, *, status: WorkorderStatus) -> int:
+        query = select(func.count(Workorder.id)).where(Workorder.status == status)
+        result = await self.session.execute(query)
+        return int(result.scalar_one())
+
+    async def get_workorders_by_submission_ids(
+        self, submission_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Workorder]:
+        """Returns a map of submission_id -> Workorder for the given submission ids."""
+        if not submission_ids:
+            return {}
+        subq = (
+            select(Submission.id, Submission.workorder_id)
+            .where(Submission.id.in_(submission_ids))
+            .subquery()
+        )
+        query = select(subq.c.id, Workorder).join(
+            Workorder, Workorder.id == subq.c.workorder_id
+        )
+        result = await self.session.execute(query)
+        return {row[0]: row[1] for row in result.all()}
 
     @staticmethod
     def _approved_drive_tester_predicates() -> tuple[Any, ...]:

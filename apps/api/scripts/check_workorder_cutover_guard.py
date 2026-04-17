@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import os
 import ssl
 import sys
@@ -17,7 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.core.workorder_cutover_guard import WorkorderCutoverFindings, format_cutover_report
+_cutover_guard = importlib.import_module("app.core.workorder_cutover_guard")
+WorkorderCutoverFindings = _cutover_guard.WorkorderCutoverFindings
+format_cutover_report = _cutover_guard.format_cutover_report
 
 DEFAULT_SAMPLE_LIMIT = 20
 

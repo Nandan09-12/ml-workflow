@@ -11,6 +11,8 @@ class DashboardSummaryResponse(BaseModel):
     ongoing_submissions: int
     completed_submissions: int
     no_submission_yet: int
+    active_workorders: int
+    completed_workorders: int
     reference_date: date
     date_from: date | None
     date_to: date | None

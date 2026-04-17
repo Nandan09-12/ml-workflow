@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,3 +80,44 @@ class WorkorderSummaryResponse(BaseModel):
     skipped_grids: int
     remaining_grids: int
     progress_percent: float
+
+
+class UpdateWorkorderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workorder_code: str | None = Field(default=None, min_length=1, max_length=255)
+    region: Region | None = None
+    total_grids: int | None = Field(default=None, gt=0)
+
+
+@dataclass(frozen=True)
+class WorkorderDetailView:
+    id: uuid.UUID
+    workorder_code: str
+    region: Region
+    status: WorkorderStatus
+    total_grids: int
+    completed_grids: int
+    skipped_grids: int
+    remaining_grids: int
+    progress_percent: float
+    created_at: datetime
+    updated_at: datetime
+    submissions: list = field(default_factory=list)
+
+
+class WorkorderDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+    id: uuid.UUID
+    workorder_code: str
+    region: Region
+    status: WorkorderStatus
+    total_grids: int
+    completed_grids: int
+    skipped_grids: int
+    remaining_grids: int
+    progress_percent: float
+    created_at: datetime
+    updated_at: datetime
+    submissions: list

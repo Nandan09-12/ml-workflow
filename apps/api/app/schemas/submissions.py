@@ -4,6 +4,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums import AuditActionType, AuditSource, Shift, SubmissionStatus
+from app.schemas.workorders import WorkorderSummaryResponse
 
 
 class CreateSubmissionRequest(BaseModel):
@@ -56,6 +57,7 @@ class SubmissionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     file_submission_pending: bool
+    workorder_summary: WorkorderSummaryResponse | None = None
 
 
 class SubmissionAuditResponse(BaseModel):

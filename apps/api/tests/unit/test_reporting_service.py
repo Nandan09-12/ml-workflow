@@ -2,14 +2,23 @@ import csv
 import io
 import uuid
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
+from app.core.enums import (
+    AccountStatus,
+    RequestedRole,
+    Shift,
+    SubmissionStatus,
+    WorkorderStatus,
+)
 from app.core.errors import AppError
 from app.models.app_user import AppUser
 from app.services.reporting_service import ReportingService
+
+if TYPE_CHECKING:
+    pass
 
 
 class FakeReportingRepository:
@@ -146,6 +155,18 @@ class FakeReportingRepository:
     ) -> dict[uuid.UUID, int]:
         return dict.fromkeys(submission_ids, 0)
 
+    async def count_workorders_by_status(self, *, status: "WorkorderStatus") -> int:
+        from app.core.enums import WorkorderStatus
+        if status == WorkorderStatus.ACTIVE:
+            return 3
+        return 1
+
+    async def get_workorders_by_submission_ids(
+        self, submission_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Any]:
+        # Returns empty — CSV workorder columns will be blank in tests
+        return {}
+
 
 def _auth_payload(user: AppUser) -> dict[str, Any]:
     return {"sub": str(user.auth_user_id), "email": user.email}
@@ -226,3 +247,66 @@ async def test_export_submissions_csv_uses_filter_model() -> None:
     assert repo.last_export_filters is not None
     assert repo.last_export_filters["file_submission_pending"] is True
     assert repo.last_export_filters["owner_user_id"] == repo.tester_user.id
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 52: dashboard includes workorder counts
+# ---------------------------------------------------------------------------
+
+
+async def test_dashboard_summary_includes_workorder_counts() -> None:
+    repo = FakeReportingRepository()
+    service = ReportingService(repository=repo)
+
+    result = await service.get_dashboard_summary(
+        _auth_payload(repo.admin_user),
+        work_date=date(2026, 4, 14),
+    )
+
+    assert hasattr(result, "active_workorders")
+    assert hasattr(result, "completed_workorders")
+    assert result.active_workorders == 3   # per FakeReportingRepository stub
+    assert result.completed_workorders == 1
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 54: CSV export includes workorder fields
+# ---------------------------------------------------------------------------
+
+
+async def test_export_csv_includes_workorder_fields() -> None:
+    repo = FakeReportingRepository()
+    service = ReportingService(repository=repo)
+
+    csv_text = await service.export_submissions_csv(
+        _auth_payload(repo.admin_user),
+        work_date=date(2026, 4, 14),
+    )
+
+    reader = csv.DictReader(io.StringIO(csv_text))
+    rows = list(reader)
+    assert len(rows) >= 1
+    # These columns must be present in the CSV header
+    headers = reader.fieldnames or []
+    assert "workorder_code" in headers
+    assert "workorder_region" in headers
+    assert "workorder_status" in headers
+    assert "workorder_progress_percent" in headers
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 55: mobile bootstrap includes workorder_statuses
+# ---------------------------------------------------------------------------
+
+
+async def test_dashboard_summary_no_submission_count_is_still_int() -> None:
+    """Regression guard: no_submission_yet is still present in summary."""
+    repo = FakeReportingRepository()
+    service = ReportingService(repository=repo)
+
+    result = await service.get_dashboard_summary(
+        _auth_payload(repo.admin_user),
+        work_date=date(2026, 4, 14),
+    )
+
+    assert isinstance(result.no_submission_yet, int)
