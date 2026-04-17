@@ -109,6 +109,7 @@ class ReportingRepository(BaseRepository):
             date_to=date_to,
             status=status,
             shift=shift,
+            workorder_status=None,
             owner_user_id=owner_user_id,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,

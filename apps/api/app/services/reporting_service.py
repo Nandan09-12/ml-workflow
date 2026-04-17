@@ -337,5 +337,5 @@ class ReportingService:
         status: SubmissionStatus,
         active_attachment_count: int,
     ) -> bool:
-        return status == SubmissionStatus.COMPLETED and active_attachment_count == 0
+        return status == SubmissionStatus.CHECKED_OUT and active_attachment_count == 0
 

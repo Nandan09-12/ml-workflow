@@ -1,114 +1,95 @@
+import asyncio
+from datetime import date, timedelta
 import uuid
-from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.enums import (
     AccountStatus,
     AuditActionType,
+    Region,
     RequestedRole,
     Shift,
     SubmissionStatus,
-    Zone,
+    WorkorderStatus,
 )
 from app.core.errors import AppError
-from app.models.app_user import AppUser
 from app.models.submission import Submission
-from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 from app.repositories.submission_repository import SubmissionRepository
-from app.schemas.submissions import CreateSubmissionRequest, UpdateSubmissionRequest
+from app.repositories.workorder_repository import WorkorderRepository
+from app.schemas.submissions import UpdateSubmissionRequest
+from app.schemas.workorders import StartDriveRequest
 from app.services.submission_service import SubmissionService
+from app.services.workorder_service import WorkorderService
+from tests.integration.helpers import (
+    auth_payload,
+    build_attachment,
+    build_submission,
+    build_user,
+    build_workorder,
+)
 
 pytestmark = pytest.mark.integration
 
 
-def _build_user(
-    *,
-    email: str,
-    requested_role: RequestedRole,
-    approved_role: RequestedRole | None,
-    account_status: AccountStatus,
-) -> AppUser:
-    now = datetime.now(UTC)
-    return AppUser(
-        id=uuid.uuid4(),
-        auth_user_id=uuid.uuid4(),
-        full_name=email.split("@")[0],
-        email=email,
-        requested_role=requested_role,
-        approved_role=approved_role,
-        account_status=account_status,
-        approved_at=now if account_status == AccountStatus.APPROVED else None,
-        approved_by_user_id=None,
-        created_at=now,
-        updated_at=now,
-    )
+class _AsyncBarrier:
+    def __init__(self, parties: int) -> None:
+        self._parties = parties
+        self._waiting = 0
+        self._event = asyncio.Event()
+        self._lock = asyncio.Lock()
+
+    async def wait(self) -> None:
+        async with self._lock:
+            self._waiting += 1
+            if self._waiting >= self._parties:
+                self._event.set()
+        await self._event.wait()
 
 
-def _auth_payload(user: AppUser) -> dict[str, str]:
-    return {"sub": str(user.auth_user_id), "email": user.email}
+class _CoordinatedWorkorderRepository(WorkorderRepository):
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        wait_on_missing_workorder: _AsyncBarrier | None = None,
+        wait_on_missing_submission: _AsyncBarrier | None = None,
+    ) -> None:
+        super().__init__(session)
+        self._wait_on_missing_workorder = wait_on_missing_workorder
+        self._wait_on_missing_submission = wait_on_missing_submission
+
+    async def get_workorder_by_normalized_code(self, code: str) -> Workorder | None:
+        workorder = await super().get_workorder_by_normalized_code(code)
+        if workorder is None and self._wait_on_missing_workorder is not None:
+            await self._wait_on_missing_workorder.wait()
+        return workorder
+
+    async def get_submission_by_workorder_date(
+        self,
+        *,
+        workorder_id: uuid.UUID,
+        work_date: date,
+        exclude_submission_id: uuid.UUID | None = None,
+    ) -> Submission | None:
+        submission = await super().get_submission_by_workorder_date(
+            workorder_id=workorder_id,
+            work_date=work_date,
+            exclude_submission_id=exclude_submission_id,
+        )
+        if submission is None and self._wait_on_missing_submission is not None:
+            await self._wait_on_missing_submission.wait()
+        return submission
 
 
-def _today_for_zone(zone: Zone) -> date:
-    timezone_map = {
-        Zone.NORTHEAST: "America/New_York",
-        Zone.SOUTH_FLORIDA: "America/New_York",
-        Zone.CENTRAL: "America/Chicago",
-    }
-    return datetime.now(ZoneInfo(timezone_map[zone])).date()
-
-
-def _build_submission(
-    *,
-    owner: AppUser,
-    work_date: date,
-    cluster_name: str,
-    cluster_name_normalized: str,
-    status: SubmissionStatus = SubmissionStatus.IN_PROGRESS,
-    pending_grids: int = 2,
-    completed_grids: int = 7,
-    version_number: int = 1,
-) -> Submission:
-    now = datetime.now(UTC)
-    return Submission(
-        id=uuid.uuid4(),
-        client_generated_id=uuid.uuid4(),
-        owner_user_id=owner.id,
-        submitter_name_snapshot=owner.full_name,
-        submitter_email_snapshot=owner.email,
-        zone=Zone.NORTHEAST,
-        work_date=work_date,
-        shift=Shift.AM,
-        team_number="11",
-        ticket_number="TKT-1",
-        cluster_name=cluster_name,
-        cluster_name_normalized=cluster_name_normalized,
-        number_of_grids=10,
-        skipped_grids=1,
-        force_tested_grids=0,
-        pending_grids=pending_grids,
-        completed_grids=completed_grids,
-        status=status,
-        created_at=now,
-        created_by_user_id=owner.id,
-        updated_at=now,
-        updated_by_user_id=owner.id,
-        completed_at=now if status == SubmissionStatus.COMPLETED else None,
-        completed_by_user_id=owner.id if status == SubmissionStatus.COMPLETED else None,
-        reopened_at=None,
-        reopened_by_user_id=None,
-        version_number=version_number,
-    )
-
-
-async def test_submission_create_persists_normalized_cluster_and_audit(
+async def test_start_drive_creates_workorder_submission_and_audit(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
         email="owner-create@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
@@ -117,78 +98,82 @@ async def test_submission_create_persists_normalized_cluster_and_audit(
     integration_session.add(owner)
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
-    created = await service.create_submission(
-        _auth_payload(owner),
-        CreateSubmissionRequest(
-            zone=Zone.NORTHEAST,
-            work_date=_today_for_zone(Zone.NORTHEAST),
+    selected_date = date(2026, 4, 14)
+    service = WorkorderService(
+        repository=WorkorderRepository(integration_session),
+        _today_override=selected_date,
+    )
+
+    created = await service.start_drive(
+        auth_payload(owner),
+        StartDriveRequest(
+            workorder_code="  Wo-100  ",
+            region=Region.NE_UP,
+            total_grids=10,
+            work_date=selected_date,
             shift=Shift.AM,
             team_number=" 11 ",
             ticket_number=" TKT-1 ",
-            cluster_name="  Clu-ster__One  ",
-            number_of_grids=10,
-            skipped_grids=1,
-            force_tested_grids=0,
-            pending_grids=2,
-            completed_grids=7,
         ),
     )
 
-    assert created.cluster_name == "Clu-ster__One"
-    assert created.cluster_name_normalized == "CLU STER ONE"
     assert created.status == SubmissionStatus.IN_PROGRESS
     assert created.file_submission_pending is False
+    assert created.workorder.workorder_code == "Wo-100"
+    assert created.workorder.total_grids == 10
+    assert created.team_number == "11"
+    assert created.ticket_number == "TKT-1"
 
-    saved = (
-        await integration_session.execute(select(Submission).where(Submission.id == created.id))
+    saved_workorder = (
+        await integration_session.execute(
+            select(Workorder).where(Workorder.id == created.workorder_id)
+        )
     ).scalar_one()
-    assert saved.cluster_name_normalized == "CLU STER ONE"
+    assert saved_workorder.workorder_code_normalized == "WO-100"
 
     logs = (
         await integration_session.execute(
-            select(SubmissionAuditLog).where(SubmissionAuditLog.submission_id == created.id)
+            select(SubmissionAuditLog).where(
+                SubmissionAuditLog.submission_id == created.id
+            )
         )
     ).scalars().all()
     assert len(logs) == 1
     assert logs[0].action_type == AuditActionType.CREATED
 
 
-async def test_submission_create_rejects_duplicate_by_normalized_key(
+async def test_start_drive_rejects_duplicate_submission_for_same_workorder_day(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
         email="owner-dup@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    selected_date = _today_for_zone(Zone.NORTHEAST)
-    existing = _build_submission(
+    selected_date = date(2026, 4, 14)
+    workorder = build_workorder(owner=owner, workorder_code="WO-DUP")
+    existing = build_submission(
         owner=owner,
+        workorder=workorder,
         work_date=selected_date,
-        cluster_name="Alpha Cluster",
-        cluster_name_normalized="ALPHA CLUSTER",
     )
-    integration_session.add_all([owner, existing])
+    integration_session.add_all([owner, workorder, existing])
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    service = WorkorderService(
+        repository=WorkorderRepository(integration_session),
+        _today_override=selected_date,
+    )
     with pytest.raises(AppError) as exc:
-        await service.create_submission(
-            _auth_payload(owner),
-            CreateSubmissionRequest(
-                zone=Zone.NORTHEAST,
+        await service.start_drive(
+            auth_payload(owner),
+            StartDriveRequest(
+                workorder_code="WO-DUP",
                 work_date=selected_date,
                 shift=Shift.AM,
                 team_number="11",
                 ticket_number="TKT-1",
-                cluster_name=" alpha__cluster ",
-                number_of_grids=10,
-                skipped_grids=1,
-                force_tested_grids=0,
-                pending_grids=2,
-                completed_grids=7,
             ),
         )
 
@@ -196,10 +181,259 @@ async def test_submission_create_rejects_duplicate_by_normalized_key(
     assert exc.value.status_code == 409
 
 
-async def test_submission_create_rejects_future_work_date_for_zone(
+async def test_start_drive_concurrent_same_day_returns_conflict_and_keeps_one_row(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
+        email="owner-race-same-day@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    integration_session.add(owner)
+    await integration_session.commit()
+
+    bind = integration_session.bind
+    assert bind is not None
+    barrier = _AsyncBarrier(2)
+    session_factory = async_sessionmaker(
+        bind=bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with session_factory() as session_one, session_factory() as session_two:
+        service_one = WorkorderService(
+            repository=_CoordinatedWorkorderRepository(
+                session_one,
+                wait_on_missing_workorder=barrier,
+            ),
+            _today_override=date(2026, 4, 14),
+        )
+        service_two = WorkorderService(
+            repository=_CoordinatedWorkorderRepository(
+                session_two,
+                wait_on_missing_workorder=barrier,
+            ),
+            _today_override=date(2026, 4, 14),
+        )
+
+        results = await asyncio.gather(
+            service_one.start_drive(
+                auth_payload(owner),
+                StartDriveRequest(
+                    workorder_code="WO-RACE-SAME-DAY",
+                    region=Region.NE_UP,
+                    total_grids=10,
+                    work_date=date(2026, 4, 14),
+                    shift=Shift.AM,
+                    team_number="11",
+                    ticket_number="TKT-1",
+                ),
+            ),
+            service_two.start_drive(
+                auth_payload(owner),
+                StartDriveRequest(
+                    workorder_code="WO-RACE-SAME-DAY",
+                    region=Region.NE_UP,
+                    total_grids=10,
+                    work_date=date(2026, 4, 14),
+                    shift=Shift.AM,
+                    team_number="11",
+                    ticket_number="TKT-1",
+                ),
+            ),
+            return_exceptions=True,
+        )
+
+    successes = [result for result in results if not isinstance(result, Exception)]
+    failures = [result for result in results if isinstance(result, Exception)]
+
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert isinstance(failures[0], AppError)
+    assert failures[0].code.value == "SUBMISSION_ALREADY_EXISTS"
+    assert failures[0].status_code == 409
+
+    workorders = (
+        await integration_session.execute(
+            select(Workorder).where(
+                Workorder.workorder_code_normalized == "WO-RACE-SAME-DAY"
+            )
+        )
+    ).scalars().all()
+    submissions = (
+        await integration_session.execute(
+            select(Submission)
+            .join(Workorder, Submission.workorder_id == Workorder.id)
+            .where(Workorder.workorder_code_normalized == "WO-RACE-SAME-DAY")
+        )
+    ).scalars().all()
+
+    assert len(workorders) == 1
+    assert len(submissions) == 1
+
+
+async def test_start_drive_concurrent_new_workorder_different_days_reuses_parent(
+    integration_session: AsyncSession,
+) -> None:
+    owner = build_user(
+        email="owner-race-different-days@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    integration_session.add(owner)
+    await integration_session.commit()
+
+    bind = integration_session.bind
+    assert bind is not None
+    barrier = _AsyncBarrier(2)
+    session_factory = async_sessionmaker(
+        bind=bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with session_factory() as session_one, session_factory() as session_two:
+        service_one = WorkorderService(
+            repository=_CoordinatedWorkorderRepository(
+                session_one,
+                wait_on_missing_workorder=barrier,
+            ),
+            _today_override=date(2026, 4, 15),
+        )
+        service_two = WorkorderService(
+            repository=_CoordinatedWorkorderRepository(
+                session_two,
+                wait_on_missing_workorder=barrier,
+            ),
+            _today_override=date(2026, 4, 15),
+        )
+
+        first_day, second_day = await asyncio.gather(
+            service_one.start_drive(
+                auth_payload(owner),
+                StartDriveRequest(
+                    workorder_code="WO-RACE-MULTI",
+                    region=Region.NE_UP,
+                    total_grids=12,
+                    work_date=date(2026, 4, 14),
+                    shift=Shift.AM,
+                    team_number="11",
+                    ticket_number="TKT-1",
+                ),
+            ),
+            service_two.start_drive(
+                auth_payload(owner),
+                StartDriveRequest(
+                    workorder_code="WO-RACE-MULTI",
+                    region=Region.NE_UP,
+                    total_grids=12,
+                    work_date=date(2026, 4, 15),
+                    shift=Shift.AM,
+                    team_number="11",
+                    ticket_number="TKT-2",
+                ),
+            ),
+        )
+
+    submissions = (
+        await integration_session.execute(
+            select(Submission)
+            .join(Workorder, Submission.workorder_id == Workorder.id)
+            .where(Workorder.workorder_code_normalized == "WO-RACE-MULTI")
+            .order_by(Submission.work_date.asc())
+        )
+    ).scalars().all()
+
+    assert first_day.workorder_id == second_day.workorder_id
+    assert [submission.work_date for submission in submissions] == [
+        date(2026, 4, 14),
+        date(2026, 4, 15),
+    ]
+
+
+async def test_start_drive_allows_multi_day_continuation_for_same_and_different_driver(
+    integration_session: AsyncSession,
+) -> None:
+    first_driver = build_user(
+        email="driver-one@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    second_driver = build_user(
+        email="driver-two@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    integration_session.add_all([first_driver, second_driver])
+    await integration_session.commit()
+
+    service = WorkorderService(
+        repository=WorkorderRepository(integration_session),
+        _today_override=date(2026, 4, 16),
+    )
+
+    day_one = await service.start_drive(
+        auth_payload(first_driver),
+        StartDriveRequest(
+            workorder_code="WO-CONTINUE",
+            region=Region.NE_UP,
+            total_grids=12,
+            work_date=date(2026, 4, 14),
+            shift=Shift.AM,
+            team_number="11",
+            ticket_number="TKT-1",
+        ),
+    )
+    day_two_same_driver = await service.start_drive(
+        auth_payload(first_driver),
+        StartDriveRequest(
+            workorder_code="WO-CONTINUE",
+            work_date=date(2026, 4, 15),
+            shift=Shift.AM,
+            team_number="11",
+            ticket_number="TKT-2",
+        ),
+    )
+    day_three_different_driver = await service.start_drive(
+        auth_payload(second_driver),
+        StartDriveRequest(
+            workorder_code="WO-CONTINUE",
+            work_date=date(2026, 4, 16),
+            shift=Shift.AM,
+            team_number="22",
+            ticket_number="TKT-3",
+        ),
+    )
+
+    submissions = (
+        await integration_session.execute(
+            select(Submission)
+            .where(Submission.workorder_id == day_one.workorder_id)
+            .order_by(Submission.work_date.asc())
+        )
+    ).scalars().all()
+
+    assert day_one.workorder_id == day_two_same_driver.workorder_id
+    assert day_one.workorder_id == day_three_different_driver.workorder_id
+    assert day_one.owner_user_id == first_driver.id
+    assert day_two_same_driver.owner_user_id == first_driver.id
+    assert day_three_different_driver.owner_user_id == second_driver.id
+    assert [submission.work_date for submission in submissions] == [
+        date(2026, 4, 14),
+        date(2026, 4, 15),
+        date(2026, 4, 16),
+    ]
+
+
+async def test_start_drive_rejects_future_work_date_for_workorder_region(
+    integration_session: AsyncSession,
+) -> None:
+    owner = build_user(
         email="owner-future@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
@@ -207,99 +441,229 @@ async def test_submission_create_rejects_future_work_date_for_zone(
     )
     integration_session.add(owner)
     await integration_session.commit()
-    future_date = _today_for_zone(Zone.CENTRAL) + timedelta(days=1)
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    today = date(2026, 4, 14)
+    future_date = today + timedelta(days=1)
+    service = WorkorderService(
+        repository=WorkorderRepository(integration_session),
+        _today_override=today,
+    )
     with pytest.raises(AppError) as exc:
-        await service.create_submission(
-            _auth_payload(owner),
-            CreateSubmissionRequest(
-                zone=Zone.CENTRAL,
+        await service.start_drive(
+            auth_payload(owner),
+            StartDriveRequest(
+                workorder_code="WO-FUTURE",
+                region=Region.CENTRAL,
+                total_grids=10,
                 work_date=future_date,
                 shift=Shift.AM,
                 team_number="11",
                 ticket_number="TKT-2",
-                cluster_name="Future Cluster",
-                number_of_grids=10,
-                skipped_grids=1,
-                force_tested_grids=0,
-                pending_grids=2,
-                completed_grids=7,
             ),
         )
 
     assert exc.value.code.value == "VALIDATION_ERROR"
-    assert exc.value.status_code == 400
+    assert exc.value.status_code == 422
 
 
-async def test_submission_complete_requires_pending_grids_zero(
+async def test_submission_complete_requires_attachment(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
         email="owner-complete-fail@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    submission = _build_submission(
+    workorder = build_workorder(owner=owner, workorder_code="WO-COMPLETE")
+    submission = build_submission(
         owner=owner,
-        work_date=_today_for_zone(Zone.NORTHEAST),
-        cluster_name="Cluster Pending",
-        cluster_name_normalized="CLUSTER PENDING",
-        pending_grids=1,
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+        skipped_grids=1,
         completed_grids=8,
     )
-    integration_session.add_all([owner, submission])
+    integration_session.add_all([owner, workorder, submission])
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    service = SubmissionService(
+        repository=SubmissionRepository(integration_session)
+    )
     with pytest.raises(AppError) as exc:
-        await service.complete_submission(_auth_payload(owner), submission.id)
+        await service.complete_submission(auth_payload(owner), submission.id)
 
-    assert exc.value.code.value == "PENDING_GRIDS_MUST_BE_ZERO"
+    assert exc.value.code.value == "ATTACHMENT_REQUIRED"
     assert exc.value.status_code == 400
 
 
-async def test_submission_complete_then_reopen_updates_status_flags_and_audit(
+async def test_submission_complete_keeps_parent_active_until_aggregate_reaches_total(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
+        email="owner-complete-partial@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    workorder = build_workorder(
+        owner=owner,
+        workorder_code="WO-PARTIAL-COMPLETE",
+        total_grids=10,
+    )
+    first_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 13),
+        status=SubmissionStatus.COMPLETED,
+        skipped_grids=1,
+        completed_grids=4,
+    )
+    second_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+        skipped_grids=0,
+        completed_grids=2,
+    )
+    attachment = build_attachment(submission=second_submission, uploader=owner)
+    integration_session.add_all(
+        [owner, workorder, first_submission, second_submission, attachment]
+    )
+    await integration_session.commit()
+
+    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    completed = await service.complete_submission(
+        auth_payload(owner),
+        second_submission.id,
+    )
+
+    saved_workorder = (
+        await integration_session.execute(
+            select(Workorder).where(Workorder.id == workorder.id)
+        )
+    ).scalar_one()
+
+    assert completed.status == SubmissionStatus.COMPLETED
+    assert saved_workorder.status == WorkorderStatus.ACTIVE
+    assert saved_workorder.completed_at is None
+
+
+async def test_submission_complete_marks_parent_completed_when_multi_day_total_is_met(
+    integration_session: AsyncSession,
+) -> None:
+    owner = build_user(
+        email="owner-complete-full@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    workorder = build_workorder(
+        owner=owner,
+        workorder_code="WO-FULL-COMPLETE",
+        total_grids=10,
+    )
+    first_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 13),
+        status=SubmissionStatus.COMPLETED,
+        skipped_grids=1,
+        completed_grids=4,
+    )
+    second_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+        skipped_grids=1,
+        completed_grids=4,
+    )
+    attachment = build_attachment(submission=second_submission, uploader=owner)
+    integration_session.add_all(
+        [owner, workorder, first_submission, second_submission, attachment]
+    )
+    await integration_session.commit()
+
+    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    await service.complete_submission(auth_payload(owner), second_submission.id)
+
+    saved_workorder = (
+        await integration_session.execute(
+            select(Workorder).where(Workorder.id == workorder.id)
+        )
+    ).scalar_one()
+
+    assert saved_workorder.status == WorkorderStatus.COMPLETED
+    assert saved_workorder.completed_at is not None
+    assert saved_workorder.completed_by_user_id == owner.id
+
+
+async def test_submission_complete_then_reopen_updates_parent_and_audit(
+    integration_session: AsyncSession,
+) -> None:
+    owner = build_user(
         email="owner-lifecycle@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    admin = _build_user(
+    admin = build_user(
         email="admin-lifecycle@example.com",
         requested_role=RequestedRole.ADMIN,
         approved_role=RequestedRole.ADMIN,
         account_status=AccountStatus.APPROVED,
     )
-    submission = _build_submission(
+    workorder = build_workorder(
         owner=owner,
-        work_date=_today_for_zone(Zone.NORTHEAST),
-        cluster_name="Cluster Lifecycle",
-        cluster_name_normalized="CLUSTER LIFECYCLE",
-        pending_grids=0,
+        workorder_code="WO-LIFECYCLE",
+        total_grids=10,
+    )
+    submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+        skipped_grids=1,
         completed_grids=9,
     )
-    integration_session.add_all([owner, admin, submission])
+    attachment = build_attachment(submission=submission, uploader=owner)
+    integration_session.add_all(
+        [owner, admin, workorder, submission, attachment]
+    )
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
-    completed = await service.complete_submission(_auth_payload(owner), submission.id)
-    reopened = await service.reopen_submission(_auth_payload(admin), submission.id)
+    service = SubmissionService(
+        repository=SubmissionRepository(integration_session)
+    )
+    completed = await service.complete_submission(
+        auth_payload(owner),
+        submission.id,
+    )
+    reopened = await service.reopen_submission(
+        auth_payload(admin),
+        submission.id,
+    )
 
     assert completed.status == SubmissionStatus.COMPLETED
-    assert completed.file_submission_pending is True
-    assert reopened.status == SubmissionStatus.IN_PROGRESS
+    assert reopened.status == SubmissionStatus.CHECKED_OUT
     assert reopened.file_submission_pending is False
 
-    saved = (
-        await integration_session.execute(select(Submission).where(Submission.id == submission.id))
+    saved_submission = (
+        await integration_session.execute(
+            select(Submission).where(Submission.id == submission.id)
+        )
     ).scalar_one()
-    assert saved.reopened_by_user_id == admin.id
-    assert saved.completed_by_user_id == owner.id
+    saved_workorder = (
+        await integration_session.execute(
+            select(Workorder).where(Workorder.id == workorder.id)
+        )
+    ).scalar_one()
+    assert saved_submission.status == SubmissionStatus.CHECKED_OUT
+    assert saved_submission.completed_by_user_id == owner.id
+    assert saved_submission.reopened_by_user_id == admin.id
+    assert saved_workorder.status == WorkorderStatus.ACTIVE
 
     logs = (
         await integration_session.execute(
@@ -313,62 +677,140 @@ async def test_submission_complete_then_reopen_updates_status_flags_and_audit(
     assert AuditActionType.REOPENED in action_types
 
 
+async def test_reopen_one_completed_child_reverts_parent_without_changing_sibling(
+    integration_session: AsyncSession,
+) -> None:
+    owner = build_user(
+        email="owner-reopen-sibling@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    admin = build_user(
+        email="admin-reopen-sibling@example.com",
+        requested_role=RequestedRole.ADMIN,
+        approved_role=RequestedRole.ADMIN,
+        account_status=AccountStatus.APPROVED,
+    )
+    workorder = build_workorder(
+        owner=owner,
+        workorder_code="WO-REOPEN-SIBLING",
+        status=WorkorderStatus.COMPLETED,
+        total_grids=10,
+    )
+    first_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 13),
+        status=SubmissionStatus.COMPLETED,
+        skipped_grids=1,
+        completed_grids=4,
+    )
+    second_submission = build_submission(
+        owner=owner,
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.COMPLETED,
+        skipped_grids=1,
+        completed_grids=4,
+    )
+    first_attachment = build_attachment(submission=first_submission, uploader=owner)
+    second_attachment = build_attachment(submission=second_submission, uploader=owner)
+    integration_session.add_all(
+        [
+            owner,
+            admin,
+            workorder,
+            first_submission,
+            second_submission,
+            first_attachment,
+            second_attachment,
+        ]
+    )
+    await integration_session.commit()
+
+    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    reopened = await service.reopen_submission(
+        auth_payload(admin),
+        second_submission.id,
+    )
+
+    saved_workorder = (
+        await integration_session.execute(
+            select(Workorder).where(Workorder.id == workorder.id)
+        )
+    ).scalar_one()
+    saved_first_submission = (
+        await integration_session.execute(
+            select(Submission).where(Submission.id == first_submission.id)
+        )
+    ).scalar_one()
+
+    assert reopened.status == SubmissionStatus.CHECKED_OUT
+    assert saved_workorder.status == WorkorderStatus.ACTIVE
+    assert saved_workorder.completed_at is None
+    assert saved_first_submission.status == SubmissionStatus.COMPLETED
+
+
 async def test_submission_admin_list_supports_file_submission_pending_filter(
     integration_session: AsyncSession,
 ) -> None:
-    admin = _build_user(
+    admin = build_user(
         email="admin-filter@example.com",
         requested_role=RequestedRole.ADMIN,
         approved_role=RequestedRole.ADMIN,
         account_status=AccountStatus.APPROVED,
     )
-    owner = _build_user(
+    owner = build_user(
         email="owner-filter@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    selected_date = _today_for_zone(Zone.NORTHEAST)
-    pending_file = _build_submission(
+    pending_workorder = build_workorder(
         owner=owner,
-        work_date=selected_date,
-        cluster_name="Pending File",
-        cluster_name_normalized="PENDING FILE",
-        status=SubmissionStatus.COMPLETED,
-        pending_grids=0,
-        completed_grids=9,
+        workorder_code="WO-PENDING",
     )
-    with_file = _build_submission(
+    with_file_workorder = build_workorder(
         owner=owner,
-        work_date=selected_date,
-        cluster_name="Has File",
-        cluster_name_normalized="HAS FILE",
-        status=SubmissionStatus.COMPLETED,
-        pending_grids=0,
-        completed_grids=9,
+        workorder_code="WO-WITHFILE",
     )
-    integration_session.add_all([admin, owner, pending_file, with_file])
-    await integration_session.flush()
-    integration_session.add(
-        SubmissionAttachment(
-            id=uuid.uuid4(),
-            submission_id=with_file.id,
-            file_name="evidence.csv",
-            bucket_name="attachments",
-            object_path=f"{with_file.id}/evidence.csv",
-            mime_type="text/csv",
-            file_extension=".csv",
-            file_size_bytes=100,
-            uploaded_by_user_id=owner.id,
-            uploaded_at=datetime.now(UTC),
-            is_active=True,
-        )
+    pending_file = build_submission(
+        owner=owner,
+        workorder=pending_workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+    )
+    with_file = build_submission(
+        owner=owner,
+        workorder=with_file_workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+        ticket_number="TKT-2",
+    )
+    attachment = build_attachment(
+        submission=with_file,
+        uploader=owner,
+        file_name="evidence.csv",
+    )
+    integration_session.add_all(
+        [
+            admin,
+            owner,
+            pending_workorder,
+            with_file_workorder,
+            pending_file,
+            with_file,
+            attachment,
+        ]
     )
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    service = SubmissionService(
+        repository=SubmissionRepository(integration_session)
+    )
     items, total = await service.list_admin_submissions(
-        _auth_payload(admin),
+        auth_payload(admin),
         file_submission_pending=True,
         page=1,
         page_size=20,
@@ -383,26 +825,28 @@ async def test_submission_admin_list_supports_file_submission_pending_filter(
 async def test_submission_update_requires_matching_version(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
         email="owner-version@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    submission = _build_submission(
+    workorder = build_workorder(owner=owner, workorder_code="WO-VERSION")
+    submission = build_submission(
         owner=owner,
-        work_date=_today_for_zone(Zone.NORTHEAST),
-        cluster_name="Versioned",
-        cluster_name_normalized="VERSIONED",
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
         version_number=2,
     )
-    integration_session.add_all([owner, submission])
+    integration_session.add_all([owner, workorder, submission])
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    service = SubmissionService(
+        repository=SubmissionRepository(integration_session)
+    )
     with pytest.raises(AppError) as exc:
         await service.update_submission(
-            _auth_payload(owner),
+            auth_payload(owner),
             submission.id,
             UpdateSubmissionRequest(version_number=1, team_number="22"),
         )
@@ -414,30 +858,32 @@ async def test_submission_update_requires_matching_version(
 async def test_submission_get_requires_owner(
     integration_session: AsyncSession,
 ) -> None:
-    owner = _build_user(
+    owner = build_user(
         email="owner-a@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    other = _build_user(
+    other = build_user(
         email="owner-b@example.com",
         requested_role=RequestedRole.DRIVE_TESTER,
         approved_role=RequestedRole.DRIVE_TESTER,
         account_status=AccountStatus.APPROVED,
     )
-    submission = _build_submission(
+    workorder = build_workorder(owner=other, workorder_code="WO-OTHER")
+    submission = build_submission(
         owner=other,
-        work_date=_today_for_zone(Zone.NORTHEAST),
-        cluster_name="Other Owner",
-        cluster_name_normalized="OTHER OWNER",
+        workorder=workorder,
+        work_date=date(2026, 4, 14),
     )
-    integration_session.add_all([owner, other, submission])
+    integration_session.add_all([owner, other, workorder, submission])
     await integration_session.commit()
 
-    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    service = SubmissionService(
+        repository=SubmissionRepository(integration_session)
+    )
     with pytest.raises(AppError) as exc:
-        await service.get_submission(_auth_payload(owner), submission.id)
+        await service.get_submission(auth_payload(owner), submission.id)
 
     assert exc.value.code.value == "NOT_OWNER"
     assert exc.value.status_code == 403
