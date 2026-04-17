@@ -24,23 +24,33 @@ Also apply these resolved implementation decisions if they are not yet reflected
 - PATCH /api/v1/me editable fields:
   - full_name only
 
-- Cluster normalization:
+- Parent/child domain model:
+  - workorders is the parent multi-day business record
+  - submissions is the child daily closeout record
+  - one daily submission per workorder + work_date
+  - same or different driver may continue the same workorder on a later day with a new daily submission
+
+- Workorder code normalization:
   - Unicode NFKC
   - trim
-  - replace '-' and '_' with space
-  - collapse whitespace
   - uppercase
-  - store in cluster_name_normalized
+  - remove whitespace
+  - preserve '-'
+  - store in workorder_code_normalized
 
-- Pagination:
-  - default page=1
-  - default page_size=20
-  - max page_size=100
-  - invalid values => 422
+- Parent workorder fields:
+  - region belongs to the parent workorder
+  - total_grids belongs to the parent workorder and is the grand total across all days
+  - workorder statuses: ACTIVE, COMPLETED
+
+- Daily submission fields:
+  - completed_grids, skipped_grids, and force_tested_grids are that day's contribution only
+  - tester progress updates use cumulative completed_grids within the day
+  - skipped_grids are permanent for the workorder
+  - force_tested_grids is informational only
 
 - Attachments:
-  - max size 25 MB per file
-  - max 5 active attachments per submission
+  - exactly one active file per daily submission
   - allowed extensions: .csv, .xlsx
   - allowed MIME:
     - text/csv
@@ -49,13 +59,24 @@ Also apply these resolved implementation decisions if they are not yet reflected
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
   - validate extension + MIME
   - .xls not allowed in v1
+  - inactive attachment history is admin-only
+
+- Submission lifecycle:
+  - Start Drive finds or creates the parent workorder and creates the daily submission as IN_PROGRESS
+  - Start Drive stamps started_at
+  - End Drive stamps ended_at and moves the daily submission to CHECKED_OUT
+  - daily completion requires CHECKED_OUT
+
+- Aggregate workorder progress:
+  - aggregate child completed_grids + skipped_grids cannot exceed parent total_grids
+  - workorder auto-completes when aggregate child completed_grids + skipped_grids = total_grids
+  - if the last active file is removed from the relevant completed child, the child moves back to CHECKED_OUT and the parent may move back to ACTIVE
 
 - Completion + file submission pending:
-  - completion requires pending_grids = 0
-  - completion does not require attachment
-  - expose computed file_submission_pending in submission list/detail responses
-  - file_submission_pending = true when status = COMPLETED and active attachments = 0
-  - do not add DB column for this in v1
+  - daily completion requires exactly one active attachment
+  - expose computed file_submission_pending in daily submission list/detail responses
+  - file_submission_pending = true when daily submission status = CHECKED_OUT and active attachments = 0
+  - do not add DB columns for this in v1
 
 - Standard JSON response envelope:
   - success: { success: true, data: ..., meta: ... }
@@ -63,11 +84,21 @@ Also apply these resolved implementation decisions if they are not yet reflected
   - no envelope for file streams or 204 responses
 
 - Future date validation:
-  - zone-to-timezone mapping:
-    - NORTHEAST -> America/New_York
+  - region-to-timezone mapping:
+    - NE_UP -> America/New_York
     - SOUTH_FLORIDA -> America/New_York
     - CENTRAL -> America/Chicago
-  - enforce work_date <= current date in zone timezone
+  - UI labels:
+    - NE-UP
+    - South/Florida
+    - Central
+  - enforce work_date <= current date in the parent workorder region timezone
+
+- Edit rules:
+  - testers do not edit completed daily submission data
+  - admins can edit completed daily submissions
+  - admins can edit workorders
+  - testers can still manage files after completion
 
 Tech context:
 - Backend: FastAPI

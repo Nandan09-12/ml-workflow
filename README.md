@@ -25,8 +25,9 @@ V1 includes the **DT Check-in** module for drive testers and admins.
 
 ## V1 Summary
 
-Drive testers submit daily cluster/grid progress records. Admins approve users, review
-submissions, audit changes, reopen completed records if needed, and export data.
+Drive testers create daily closeout submissions under multi-day workorders. Admins approve
+users, review workorders and daily submissions, audit changes, reopen completed daily
+records if needed, and export data.
 
 ## Key V1 Decisions
 
