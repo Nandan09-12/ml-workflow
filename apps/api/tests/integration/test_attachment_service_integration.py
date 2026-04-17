@@ -100,7 +100,7 @@ def _build_submission(*, owner: AppUser) -> Submission:
         force_tested_grids=0,
         pending_grids=2,
         completed_grids=7,
-        status=SubmissionStatus.ONGOING,
+        status=SubmissionStatus.IN_PROGRESS,
         created_at=now,
         created_by_user_id=owner.id,
         updated_at=now,

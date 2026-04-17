@@ -116,7 +116,7 @@ async def test_no_submission_yet_uses_approved_tester_set(
         _build_submission(
             owner=tester_with_submission,
             work_date=selected_date,
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
             cluster_suffix="A",
         )
     )

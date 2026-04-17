@@ -61,8 +61,8 @@ def _build_submission(
         number_of_grids=10,
         skipped_grids=1,
         force_tested_grids=0,
-        pending_grids=2 if status == SubmissionStatus.ONGOING else 0,
-        completed_grids=7 if status == SubmissionStatus.ONGOING else 9,
+        pending_grids=2 if status == SubmissionStatus.IN_PROGRESS else 0,
+        completed_grids=7 if status == SubmissionStatus.IN_PROGRESS else 9,
         status=status,
         created_at=now,
         created_by_user_id=owner.id,
@@ -118,7 +118,7 @@ async def test_reporting_dashboard_summary_counts_key_metrics(
         _build_submission(
             owner=tester_with_ongoing,
             work_date=selected_date,
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
             cluster_suffix="ONGOING",
         )
     )
