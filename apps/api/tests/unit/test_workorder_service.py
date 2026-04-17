@@ -24,7 +24,7 @@ from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.workorder import Workorder
-from app.schemas.workorders import StartDriveRequest
+from app.schemas.workorders import StartDriveRequest, UpdateWorkorderRequest
 from app.services.workorder_service import WorkorderService
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,20 @@ class FakeWorkorderRepository:
             created_at=now,
             updated_at=now,
         )
-        self.users = [self.approved_user, self.pending_user]
+        self.admin_user = AppUser(
+            id=uuid.uuid4(),
+            auth_user_id=uuid.uuid4(),
+            full_name="Admin User",
+            email="admin@example.com",
+            requested_role=RequestedRole.ADMIN,
+            approved_role=RequestedRole.ADMIN,
+            account_status=AccountStatus.APPROVED,
+            approved_at=now,
+            approved_by_user_id=uuid.uuid4(),
+            created_at=now,
+            updated_at=now,
+        )
+        self.users = [self.approved_user, self.pending_user, self.admin_user]
         self.workorders: list[Workorder] = []
         self.submissions: list[Submission] = []
         self.audit_logs: list[SubmissionAuditLog] = []
@@ -116,6 +129,34 @@ class FakeWorkorderRepository:
 
     async def get_aggregate_progress(self, workorder_id: uuid.UUID) -> tuple[int, int]:
         return self._aggregate.get(workorder_id, (0, 0))
+
+    async def list_workorders(
+        self,
+        *,
+        region: Region | None = None,
+        status: WorkorderStatus | None = None,
+        workorder_code: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Workorder], int]:
+        results = list(self.workorders)
+        if region is not None:
+            results = [w for w in results if w.region == region]
+        if status is not None:
+            results = [w for w in results if w.status == status]
+        if workorder_code is not None:
+            term = workorder_code.upper()
+            results = [w for w in results if term in w.workorder_code_normalized]
+        total = len(results)
+        return results[offset : offset + limit], total
+
+    async def list_submissions_by_workorder(
+        self,
+        workorder_id: uuid.UUID,
+    ) -> list[Submission]:
+        return [s for s in self.submissions if s.workorder_id == workorder_id]
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[None]:
@@ -665,3 +706,289 @@ async def test_start_drive_accepts_past_work_date() -> None:
     )
 
     assert result.status == SubmissionStatus.IN_PROGRESS
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 — list_workorders (item 45)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_workorders_requires_admin() -> None:
+    """Non-admin approved users cannot list workorders via admin endpoint."""
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+
+    with pytest.raises(AppError) as exc:
+        await service.list_workorders(_auth(repo.approved_user))
+
+    assert exc.value.code.value == "ADMIN_ONLY"
+    assert exc.value.status_code == 403
+
+
+async def test_list_workorders_returns_all_when_no_filters() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    repo.workorders.extend([
+        _workorder("WO-A", region=Region.NE_UP),
+        _workorder("WO-B", region=Region.CENTRAL),
+        _workorder("WO-C", region=Region.SOUTH_FLORIDA),
+    ])
+
+    views, total = await service.list_workorders(_auth(repo.admin_user))
+
+    assert total == 3
+    assert len(views) == 3
+
+
+async def test_list_workorders_filters_by_region() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    repo.workorders.extend([
+        _workorder("WO-NE", region=Region.NE_UP),
+        _workorder("WO-CENTRAL", region=Region.CENTRAL),
+    ])
+
+    views, total = await service.list_workorders(
+        _auth(repo.admin_user), region=Region.NE_UP
+    )
+
+    assert total == 1
+    assert views[0].workorder_code == "WO-NE"
+
+
+async def test_list_workorders_filters_by_status() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    repo.workorders.extend([
+        _workorder("WO-ACTIVE", status=WorkorderStatus.ACTIVE),
+        _workorder("WO-DONE", status=WorkorderStatus.COMPLETED),
+    ])
+
+    views, total = await service.list_workorders(
+        _auth(repo.admin_user), status=WorkorderStatus.ACTIVE
+    )
+
+    assert total == 1
+    assert views[0].workorder_code == "WO-ACTIVE"
+
+
+async def test_list_workorders_filters_by_code_substring() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    repo.workorders.extend([
+        _workorder("WO-ALPHA-01", normalized_code="WO-ALPHA-01"),
+        _workorder("WO-BETA-01", normalized_code="WO-BETA-01"),
+    ])
+
+    views, total = await service.list_workorders(
+        _auth(repo.admin_user), workorder_code="ALPHA"
+    )
+
+    assert total == 1
+    assert views[0].workorder_code == "WO-ALPHA-01"
+
+
+async def test_list_workorders_paginates() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    for i in range(5):
+        repo.workorders.append(_workorder(f"WO-{i:02d}"))
+
+    views, total = await service.list_workorders(
+        _auth(repo.admin_user), page=1, page_size=2
+    )
+
+    assert total == 5
+    assert len(views) == 2
+
+
+async def test_list_workorders_includes_aggregate_progress() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-AGG", total_grids=10)
+    repo.workorders.append(wo)
+    repo._aggregate[wo.id] = (6, 2)
+
+    views, _ = await service.list_workorders(_auth(repo.admin_user))
+
+    assert views[0].completed_grids == 6
+    assert views[0].skipped_grids == 2
+    assert views[0].remaining_grids == 2
+    assert abs(views[0].progress_percent - 80.0) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 — get_workorder_admin (item 46)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_workorder_admin_requires_admin() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-DETAIL")
+    repo.workorders.append(wo)
+
+    with pytest.raises(AppError) as exc:
+        await service.get_workorder_admin(_auth(repo.approved_user), wo.id)
+
+    assert exc.value.code.value == "ADMIN_ONLY"
+
+
+async def test_get_workorder_admin_returns_not_found() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+
+    with pytest.raises(AppError) as exc:
+        await service.get_workorder_admin(_auth(repo.admin_user), uuid.uuid4())
+
+    assert exc.value.code.value == "WORKORDER_NOT_FOUND"
+    assert exc.value.status_code == 404
+
+
+async def test_get_workorder_admin_returns_detail_with_submissions() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-FULL", total_grids=10)
+    repo.workorders.append(wo)
+    sub1 = _submission(repo.approved_user.id, wo.id, work_date=date(2026, 4, 14))
+    sub2 = _submission(repo.approved_user.id, wo.id, work_date=date(2026, 4, 15))
+    repo.submissions.extend([sub1, sub2])
+    repo._aggregate[wo.id] = (6, 0)
+
+    detail = await service.get_workorder_admin(_auth(repo.admin_user), wo.id)
+
+    assert detail.id == wo.id
+    assert detail.workorder_code == "WO-FULL"
+    assert detail.total_grids == 10
+    assert detail.completed_grids == 6
+    assert len(detail.submissions) == 2
+
+
+async def test_get_workorder_admin_has_empty_submissions_list() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-EMPTY")
+    repo.workorders.append(wo)
+
+    detail = await service.get_workorder_admin(_auth(repo.admin_user), wo.id)
+
+    assert detail.submissions == []
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 — update_workorder (item 47)
+# ---------------------------------------------------------------------------
+
+
+async def test_update_workorder_requires_admin() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-UPD")
+    repo.workorders.append(wo)
+
+    with pytest.raises(AppError) as exc:
+        await service.update_workorder(
+            _auth(repo.approved_user),
+            wo.id,
+            UpdateWorkorderRequest(total_grids=20),
+        )
+
+    assert exc.value.code.value == "ADMIN_ONLY"
+
+
+async def test_update_workorder_returns_not_found() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+
+    with pytest.raises(AppError) as exc:
+        await service.update_workorder(
+            _auth(repo.admin_user),
+            uuid.uuid4(),
+            UpdateWorkorderRequest(total_grids=20),
+        )
+
+    assert exc.value.code.value == "WORKORDER_NOT_FOUND"
+
+
+async def test_update_workorder_total_grids_below_current_progress_raises() -> None:
+    """total_grids cannot be set below current aggregate (completed + skipped)."""
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-CAP", total_grids=10)
+    repo.workorders.append(wo)
+    repo._aggregate[wo.id] = (7, 2)  # sum = 9
+
+    with pytest.raises(AppError) as exc:
+        await service.update_workorder(
+            _auth(repo.admin_user),
+            wo.id,
+            UpdateWorkorderRequest(total_grids=8),  # 8 < 9 → invalid
+        )
+
+    assert exc.value.code.value == "WORKORDER_PROGRESS_EXCEEDS_TOTAL"
+
+
+async def test_update_workorder_total_grids_equal_to_progress_allowed() -> None:
+    """total_grids == current aggregate is allowed (already complete)."""
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-EQ", total_grids=10)
+    repo.workorders.append(wo)
+    repo._aggregate[wo.id] = (5, 4)  # sum = 9
+
+    view = await service.update_workorder(
+        _auth(repo.admin_user),
+        wo.id,
+        UpdateWorkorderRequest(total_grids=9),  # exactly equal → OK
+    )
+
+    assert view.total_grids == 9
+
+
+async def test_update_workorder_updates_region() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-REG-UPD", region=Region.NE_UP)
+    repo.workorders.append(wo)
+
+    view = await service.update_workorder(
+        _auth(repo.admin_user),
+        wo.id,
+        UpdateWorkorderRequest(region=Region.CENTRAL),
+    )
+
+    assert view.region == Region.CENTRAL
+
+
+async def test_update_workorder_updates_code_and_normalizes() -> None:
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-OLD", normalized_code="WO-OLD")
+    repo.workorders.append(wo)
+
+    view = await service.update_workorder(
+        _auth(repo.admin_user),
+        wo.id,
+        UpdateWorkorderRequest(workorder_code="wo new code"),
+    )
+
+    assert view.workorder_code == "wo new code"
+    assert wo.workorder_code_normalized == "WONEWCODE"
+
+
+async def test_update_workorder_no_op_when_nothing_set() -> None:
+    """If request has no fields set, workorder is returned unchanged."""
+    repo = FakeWorkorderRepository()
+    service = WorkorderService(repository=repo)
+    wo = _workorder("WO-NOOP", total_grids=10)
+    repo.workorders.append(wo)
+
+    view = await service.update_workorder(
+        _auth(repo.admin_user),
+        wo.id,
+        UpdateWorkorderRequest(),  # nothing set
+    )
+
+    assert view.total_grids == 10
+    assert view.workorder_code == "WO-NOOP"
+

@@ -9,6 +9,7 @@ from app.core.enums import (
     AuditActionType,
     AuditSource,
     Region,
+    RequestedRole,
     SubmissionStatus,
     WorkorderStatus,
 )
@@ -17,7 +18,13 @@ from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.workorder import Workorder
-from app.schemas.workorders import StartDriveRequest, WorkorderSummary, WorkorderView
+from app.schemas.workorders import (
+    StartDriveRequest,
+    UpdateWorkorderRequest,
+    WorkorderDetailView,
+    WorkorderSummary,
+    WorkorderView,
+)
 from app.services.submission_service import SubmissionView
 
 
@@ -50,6 +57,22 @@ class WorkorderRepositoryProtocol(Protocol):
     async def create_audit_log(self, log: SubmissionAuditLog) -> SubmissionAuditLog: ...
 
     async def get_aggregate_progress(self, workorder_id: uuid.UUID) -> tuple[int, int]: ...
+
+    async def list_workorders(
+        self,
+        *,
+        region: Region | None = None,
+        status: WorkorderStatus | None = None,
+        workorder_code: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Workorder], int]: ...
+
+    async def list_submissions_by_workorder(
+        self, workorder_id: uuid.UUID
+    ) -> list[Submission]: ...
 
     def transaction(self) -> Any: ...
 
@@ -231,6 +254,93 @@ class WorkorderService:
         agg = await self._repository.get_aggregate_progress(workorder.id)
         return _to_workorder_view(workorder, agg)
 
+    async def list_workorders(
+        self,
+        auth_payload: dict[str, Any],
+        *,
+        region: Region | None = None,
+        status: WorkorderStatus | None = None,
+        workorder_code: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[WorkorderView], int]:
+        await self._require_approved_admin(auth_payload)
+        offset = (page - 1) * page_size
+        workorders, total = await self._repository.list_workorders(
+            region=region,
+            status=status,
+            workorder_code=workorder_code,
+            date_from=date_from,
+            date_to=date_to,
+            offset=offset,
+            limit=page_size,
+        )
+        views = []
+        for wo in workorders:
+            agg = await self._repository.get_aggregate_progress(wo.id)
+            views.append(_to_workorder_view(wo, agg))
+        return views, total
+
+    async def get_workorder_admin(
+        self,
+        auth_payload: dict[str, Any],
+        workorder_id: uuid.UUID,
+    ) -> WorkorderDetailView:
+        await self._require_approved_admin(auth_payload)
+        workorder = await self._repository.get_workorder_by_id(workorder_id)
+        if workorder is None:
+            raise AppError(
+                ErrorCode.WORKORDER_NOT_FOUND,
+                "Workorder not found.",
+                status_code=404,
+            )
+        agg = await self._repository.get_aggregate_progress(workorder.id)
+        raw_submissions = await self._repository.list_submissions_by_workorder(workorder.id)
+        submissions = [_to_submission_view(s) for s in raw_submissions]
+        return _to_workorder_detail_view(workorder, agg, submissions)
+
+    async def update_workorder(
+        self,
+        auth_payload: dict[str, Any],
+        workorder_id: uuid.UUID,
+        request: UpdateWorkorderRequest,
+    ) -> WorkorderView:
+        actor = await self._require_approved_admin(auth_payload)
+        workorder = await self._repository.get_workorder_by_id(workorder_id)
+        if workorder is None:
+            raise AppError(
+                ErrorCode.WORKORDER_NOT_FOUND,
+                "Workorder not found.",
+                status_code=404,
+            )
+
+        if request.total_grids is not None:
+            completed_grids, skipped_grids = await self._repository.get_aggregate_progress(workorder.id)
+            if request.total_grids < completed_grids + skipped_grids:
+                raise AppError(
+                    ErrorCode.WORKORDER_PROGRESS_EXCEEDS_TOTAL,
+                    "total_grids cannot be less than current aggregate progress.",
+                    status_code=400,
+                )
+            workorder.total_grids = request.total_grids
+
+        if request.region is not None:
+            workorder.region = request.region
+
+        if request.workorder_code is not None:
+            normalized = self.normalize_code(request.workorder_code)
+            workorder.workorder_code = request.workorder_code
+            workorder.workorder_code_normalized = normalized
+
+        now = datetime.now(UTC)
+        workorder.updated_at = now
+        workorder.updated_by_user_id = actor.id
+        saved = await self._repository.save_workorder(workorder)
+        agg = await self._repository.get_aggregate_progress(saved.id)
+        return _to_workorder_view(saved, agg)
+
     async def maybe_auto_complete_workorder(
         self,
         *,
@@ -270,6 +380,16 @@ class WorkorderService:
             raise AppError(
                 ErrorCode.ACCOUNT_NOT_APPROVED,
                 "Account is not approved.",
+                status_code=403,
+            )
+        return actor
+
+    async def _require_approved_admin(self, auth_payload: dict[str, Any]) -> AppUser:
+        actor = await self._require_approved_user(auth_payload)
+        if actor.approved_role != RequestedRole.ADMIN:
+            raise AppError(
+                ErrorCode.ADMIN_ONLY,
+                "This action requires admin access.",
                 status_code=403,
             )
         return actor
@@ -346,6 +466,55 @@ def _to_workorder_view(workorder: Workorder, aggregate: tuple[int, int]) -> Work
         progress_percent=round(progress, 2),
         created_at=workorder.created_at,
         updated_at=workorder.updated_at,
+    )
+
+
+def _to_workorder_detail_view(
+    workorder: Workorder, aggregate: tuple[int, int], submissions: list
+) -> WorkorderDetailView:
+    completed_grids, skipped_grids = aggregate
+    done = completed_grids + skipped_grids
+    remaining = max(workorder.total_grids - done, 0)
+    progress = (done / workorder.total_grids * 100) if workorder.total_grids > 0 else 0.0
+    return WorkorderDetailView(
+        id=workorder.id,
+        workorder_code=workorder.workorder_code,
+        region=workorder.region,
+        status=workorder.status,
+        total_grids=workorder.total_grids,
+        completed_grids=completed_grids,
+        skipped_grids=skipped_grids,
+        remaining_grids=remaining,
+        progress_percent=round(progress, 2),
+        created_at=workorder.created_at,
+        updated_at=workorder.updated_at,
+        submissions=submissions,
+    )
+
+
+def _to_submission_view(submission: Submission) -> SubmissionView:
+    file_pending = submission.status == SubmissionStatus.COMPLETED
+    return SubmissionView(
+        id=submission.id,
+        client_generated_id=submission.client_generated_id,
+        workorder_id=submission.workorder_id,
+        owner_user_id=submission.owner_user_id,
+        submitter_name_snapshot=submission.submitter_name_snapshot,
+        submitter_email_snapshot=submission.submitter_email_snapshot,
+        work_date=submission.work_date,
+        shift=submission.shift,
+        team_number=submission.team_number,
+        ticket_number=submission.ticket_number,
+        skipped_grids=submission.skipped_grids,
+        force_tested_grids=submission.force_tested_grids,
+        completed_grids=submission.completed_grids,
+        status=submission.status,
+        version_number=submission.version_number,
+        started_at=submission.started_at,
+        ended_at=submission.ended_at,
+        created_at=submission.created_at,
+        updated_at=submission.updated_at,
+        file_submission_pending=file_pending,
     )
 
 

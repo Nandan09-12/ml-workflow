@@ -611,3 +611,77 @@ async def test_delete_attachment_on_non_completed_submission_no_workorder_change
 
     assert att.is_active is False
     assert wo.status == WorkorderStatus.ACTIVE  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 51: admin attachment history endpoint
+# ---------------------------------------------------------------------------
+
+
+async def test_get_attachment_history_requires_admin() -> None:
+    """Non-admin users cannot access the full attachment history."""
+    repo = FakeAttachmentRepository()
+    service = AttachmentService(
+        repository=repo, storage=FakeAttachmentStorage(), settings=_settings()
+    )
+
+    with pytest.raises(AppError) as exc:
+        await service.get_attachment_history(
+            _auth_payload(repo.owner_user), repo.submission.id
+        )
+
+    assert exc.value.code.value == "ADMIN_ONLY"
+    assert exc.value.status_code == 403
+
+
+async def test_get_attachment_history_returns_not_found_for_missing_submission() -> None:
+    repo = FakeAttachmentRepository()
+    service = AttachmentService(
+        repository=repo, storage=FakeAttachmentStorage(), settings=_settings()
+    )
+
+    with pytest.raises(AppError) as exc:
+        await service.get_attachment_history(_auth_payload(repo.admin_user), uuid.uuid4())
+
+    assert exc.value.code.value == "NOT_FOUND"
+    assert exc.value.status_code == 404
+
+
+async def test_get_attachment_history_returns_all_including_inactive() -> None:
+    repo = FakeAttachmentRepository()
+    service = AttachmentService(
+        repository=repo, storage=FakeAttachmentStorage(), settings=_settings()
+    )
+    now = datetime.now(UTC)
+    active_att = SubmissionAttachment(
+        id=uuid.uuid4(), submission_id=repo.submission.id, file_name="active.csv",
+        bucket_name="attachments", object_path=f"{repo.submission.id}/active.csv",
+        mime_type="text/csv", file_extension=".csv", file_size_bytes=100,
+        uploaded_by_user_id=repo.owner_user.id, uploaded_at=now, is_active=True,
+    )
+    inactive_att = SubmissionAttachment(
+        id=uuid.uuid4(), submission_id=repo.submission.id, file_name="old.csv",
+        bucket_name="attachments", object_path=f"{repo.submission.id}/old.csv",
+        mime_type="text/csv", file_extension=".csv", file_size_bytes=50,
+        uploaded_by_user_id=repo.owner_user.id, uploaded_at=now, is_active=False,
+    )
+    repo.attachments.extend([active_att, inactive_att])
+
+    views = await service.get_attachment_history(_auth_payload(repo.admin_user), repo.submission.id)
+
+    assert len(views) == 2
+    is_active_values = {v.is_active for v in views}
+    assert True in is_active_values
+    assert False in is_active_values
+
+
+async def test_get_attachment_history_returns_empty_list_when_no_attachments() -> None:
+    repo = FakeAttachmentRepository()
+    service = AttachmentService(
+        repository=repo, storage=FakeAttachmentStorage(), settings=_settings()
+    )
+
+    views = await service.get_attachment_history(_auth_payload(repo.admin_user), repo.submission.id)
+
+    assert views == []
+

@@ -33,6 +33,7 @@ class MobileReferenceDataResponse(BaseModel):
     zones: list[str]
     shifts: list[str]
     submission_statuses: list[str]
+    workorder_statuses: list[str]
 
 
 class MobileBootstrapResponse(BaseModel):

@@ -24,6 +24,7 @@ class FakeMobileReferenceDataView:
     zones: list[str]
     shifts: list[str]
     submission_statuses: list[str]
+    workorder_statuses: list[str]
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ class FakeMobileService:
                 zones=["NORTHEAST", "CENTRAL", "SOUTH_FLORIDA"],
                 shifts=["AM", "PM"],
                 submission_statuses=["ONGOING", "COMPLETED"],
+                workorder_statuses=["ACTIVE", "COMPLETED"],
             ),
         )
         self.sync_result = FakeMobileSyncResultView(

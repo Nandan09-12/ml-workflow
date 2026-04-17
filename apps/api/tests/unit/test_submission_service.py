@@ -1034,3 +1034,161 @@ async def test_reopen_submission_parent_stays_active_if_already_active() -> None
     await service.reopen_submission(_auth_payload(repo.admin_user), submission.id)
 
     assert wo.status == WorkorderStatus.ACTIVE  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 44: list/get submissions include workorder summary
+# ---------------------------------------------------------------------------
+
+
+async def test_list_my_submissions_includes_workorder_summary() -> None:
+    """list_my_submissions should return views with a populated workorder_summary."""
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=10)
+    submission = _submission(repo.owner_user.id, workorder_id=wo.id)
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    views, total = await service.list_my_submissions(_auth_payload(repo.owner_user))
+
+    assert total == 1
+    assert views[0].workorder_summary is not None
+    assert views[0].workorder_summary.workorder_code == "WO-UNIT"
+    assert views[0].workorder_summary.total_grids == 10
+
+
+async def test_list_my_submissions_workorder_summary_has_correct_aggregate() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=20)
+    s1 = _submission(repo.owner_user.id, workorder_id=wo.id, completed_grids=5, skipped_grids=2)
+    s2 = _submission(repo.admin_user.id, workorder_id=wo.id, completed_grids=3, skipped_grids=1)
+    repo.workorders[wo.id] = wo
+    repo.submissions.extend([s1, s2])
+
+    views, _ = await service.list_my_submissions(_auth_payload(repo.owner_user))
+
+    summary = views[0].workorder_summary
+    assert summary is not None
+    # aggregate = sum across ALL submissions for this workorder
+    assert summary.completed_grids == 8   # 5 + 3
+    assert summary.skipped_grids == 3     # 2 + 1
+    assert summary.remaining_grids == 9   # 20 - (8+3)
+
+
+async def test_get_submission_includes_workorder_summary() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=15)
+    submission = _submission(repo.owner_user.id, workorder_id=wo.id)
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    view = await service.get_submission(_auth_payload(repo.owner_user), submission.id)
+
+    assert view.workorder_summary is not None
+    assert view.workorder_summary.total_grids == 15
+    assert view.workorder_summary.status == WorkorderStatus.ACTIVE
+
+
+async def test_get_submission_workorder_summary_none_when_workorder_missing() -> None:
+    """If workorder is somehow missing (orphan), workorder_summary should be None."""
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    # submission has a workorder_id but no matching workorder in repo
+    submission = _submission(repo.owner_user.id)
+    repo.submissions.append(submission)
+
+    view = await service.get_submission(_auth_payload(repo.owner_user), submission.id)
+
+    assert view.workorder_summary is None
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 48: admin submissions include workorder summary
+# ---------------------------------------------------------------------------
+
+
+async def test_list_admin_submissions_includes_workorder_summary() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=10)
+    submission = _submission(repo.owner_user.id, workorder_id=wo.id)
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    views, total = await service.list_admin_submissions(_auth_payload(repo.admin_user))
+
+    assert total == 1
+    assert views[0].workorder_summary is not None
+    assert views[0].workorder_summary.total_grids == 10
+
+
+async def test_get_admin_submission_includes_workorder_summary() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=8)
+    submission = _submission(repo.owner_user.id, workorder_id=wo.id)
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    view = await service.get_admin_submission(_auth_payload(repo.admin_user), submission.id)
+
+    assert view.workorder_summary is not None
+    assert view.workorder_summary.total_grids == 8
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 49: admin submission edit recalculates parent
+# ---------------------------------------------------------------------------
+
+
+async def test_update_admin_submission_auto_completes_parent_when_aggregate_meets_total() -> None:
+    """After admin edits grids and aggregate reaches total, parent workorder auto-completes."""
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=10)
+    submission = _submission(
+        repo.owner_user.id,
+        workorder_id=wo.id,
+        status=SubmissionStatus.CHECKED_OUT,
+        completed_grids=8,
+        skipped_grids=0,
+        version_number=1,
+    )
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    await service.update_admin_submission(
+        _auth_payload(repo.admin_user),
+        submission.id,
+        UpdateSubmissionRequest(version_number=1, completed_grids=10),
+    )
+
+    assert wo.status == WorkorderStatus.COMPLETED
+
+
+async def test_update_admin_submission_does_not_auto_complete_parent_below_total() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    wo = _workorder(repo.owner_user.id, total_grids=10)
+    submission = _submission(
+        repo.owner_user.id,
+        workorder_id=wo.id,
+        status=SubmissionStatus.CHECKED_OUT,
+        completed_grids=4,
+        skipped_grids=0,
+        version_number=1,
+    )
+    repo.workorders[wo.id] = wo
+    repo.submissions.append(submission)
+
+    await service.update_admin_submission(
+        _auth_payload(repo.admin_user),
+        submission.id,
+        UpdateSubmissionRequest(version_number=1, completed_grids=5),
+    )
+
+    assert wo.status == WorkorderStatus.ACTIVE  # not complete yet
+

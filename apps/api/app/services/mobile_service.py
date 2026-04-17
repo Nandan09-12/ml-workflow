@@ -3,7 +3,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus, Zone
+from app.core.enums import (
+    AccountStatus,
+    RequestedRole,
+    Shift,
+    SubmissionStatus,
+    WorkorderStatus,
+    Zone,
+)
 from app.core.errors import AppError, ErrorCode
 from app.models.app_user import AppUser
 from app.schemas.mobile import MobileSyncRequest
@@ -25,6 +32,7 @@ class MobileReferenceDataView:
     zones: list[str]
     shifts: list[str]
     submission_statuses: list[str]
+    workorder_statuses: list[str]
 
 
 @dataclass(frozen=True)
@@ -122,6 +130,7 @@ class MobileService:
             zones=[zone.value for zone in Zone],
             shifts=[shift.value for shift in Shift],
             submission_statuses=[status.value for status in SubmissionStatus],
+            workorder_statuses=[status.value for status in WorkorderStatus],
         )
 
     @staticmethod

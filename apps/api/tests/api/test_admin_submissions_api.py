@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from app.api.v1.routers.admin_submissions import get_admin_submission_service
+from app.api.v1.routers.admin_submissions import (
+    get_admin_submission_service,
+    get_attachment_service,
+)
 from app.core.enums import Shift, SubmissionStatus
 from app.core.errors import AppError, ErrorCode
 from app.core.security import get_current_auth_payload
@@ -290,3 +293,139 @@ def test_admin_submission_audit_success(
     assert body["success"] is True
     assert body["data"]["count"] == 1
     assert body["data"]["items"][0]["action_type"] == "UPDATED"
+
+
+# ---------------------------------------------------------------------------
+# attachment history endpoint
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FakeAttachmentView:
+    id: uuid.UUID
+    submission_id: uuid.UUID
+    file_name: str
+    bucket_name: str
+    object_path: str
+    mime_type: str
+    file_extension: str
+    file_size_bytes: int
+    uploaded_by_user_id: uuid.UUID
+    uploaded_at: datetime
+    is_active: bool
+
+
+class FakeAdminAttachmentService:
+    def __init__(self) -> None:
+        now = datetime.now(UTC)
+        self.history_item = FakeAttachmentView(
+            id=uuid.uuid4(),
+            submission_id=uuid.uuid4(),
+            file_name="old_report.csv",
+            bucket_name="attachments",
+            object_path="submission/old_report.csv",
+            mime_type="text/csv",
+            file_extension=".csv",
+            file_size_bytes=200,
+            uploaded_by_user_id=uuid.uuid4(),
+            uploaded_at=now,
+            is_active=False,
+        )
+        self.raise_admin_only = False
+
+    async def get_attachment_history(
+        self,
+        _: dict[str, Any],
+        submission_id: uuid.UUID,
+    ) -> list[FakeAttachmentView]:
+        if self.raise_admin_only:
+            raise AppError(ErrorCode.ADMIN_ONLY, "Admin access required.", status_code=403)
+        return [self.history_item]
+
+
+@pytest.fixture
+def admin_attachment_service() -> FakeAdminAttachmentService:
+    return FakeAdminAttachmentService()
+
+
+def test_attachment_history_requires_auth(client: Any) -> None:
+    response = client.get(f"/api/v1/admin/submissions/{uuid.uuid4()}/attachments/history")
+    body = response.json()
+
+    assert response.status_code == 401
+    assert body["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_attachment_history_success_envelope(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_attachment_service: FakeAdminAttachmentService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_attachment_service] = lambda: admin_attachment_service
+
+    sid = admin_attachment_service.history_item.submission_id
+    response = client.get(f"/api/v1/admin/submissions/{sid}/attachments/history")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert body["data"]["count"] == 1
+    assert body["data"]["items"][0]["file_name"] == "old_report.csv"
+    assert body["data"]["items"][0]["is_active"] is False
+    assert "request_id" in body["meta"]
+
+
+def test_attachment_history_admin_only_error(
+    client: Any,
+    auth_payload_drive_tester: dict[str, Any],
+    admin_attachment_service: FakeAdminAttachmentService,
+) -> None:
+    admin_attachment_service.raise_admin_only = True
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_drive_tester
+    app.dependency_overrides[get_attachment_service] = lambda: admin_attachment_service
+
+    response = client.get(f"/api/v1/admin/submissions/{uuid.uuid4()}/attachments/history")
+    body = response.json()
+
+    assert response.status_code == 403
+    assert body["error"]["code"] == "ADMIN_ONLY"
+
+
+def test_attachment_history_invalid_uuid_422(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_attachment_service: FakeAdminAttachmentService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_attachment_service] = lambda: admin_attachment_service
+
+    response = client.get("/api/v1/admin/submissions/not-a-uuid/attachments/history")
+    body = response.json()
+
+    assert response.status_code == 422
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+
+
+# ---------------------------------------------------------------------------
+# SubmissionResponse includes workorder_summary field
+# ---------------------------------------------------------------------------
+
+
+def test_admin_submission_detail_includes_workorder_summary_key(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_submission_service: FakeAdminSubmissionService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_admin_submission_service] = lambda: admin_submission_service
+
+    response = client.get(f"/api/v1/admin/submissions/{admin_submission_service.item.id}")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert "workorder_summary" in body["data"]

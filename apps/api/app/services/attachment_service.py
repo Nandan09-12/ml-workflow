@@ -186,6 +186,16 @@ class AttachmentService:
         attachments = await self._repository.list_attachments_for_submission(submission.id, active_only=True)
         return [self._to_view(item) for item in attachments]
 
+    async def get_attachment_history(
+        self,
+        auth_payload: dict[str, Any],
+        submission_id: uuid.UUID,
+    ) -> list[AttachmentView]:
+        await self._require_approved_admin(auth_payload)
+        await self._get_submission_or_404(submission_id)
+        attachments = await self._repository.list_attachments_for_submission(submission_id, active_only=False)
+        return [self._to_view(item) for item in attachments]
+
     async def get_attachment(
         self,
         auth_payload: dict[str, Any],
@@ -274,6 +284,16 @@ class AttachmentService:
             raise AppError(
                 ErrorCode.ACCOUNT_NOT_APPROVED,
                 "Account is not approved for attachment actions.",
+                status_code=403,
+            )
+        return actor
+
+    async def _require_approved_admin(self, auth_payload: dict[str, Any]) -> AppUser:
+        actor = await self._require_approved_user(auth_payload)
+        if actor.approved_role != RequestedRole.ADMIN:
+            raise AppError(
+                ErrorCode.ADMIN_ONLY,
+                "Admin access required.",
                 status_code=403,
             )
         return actor

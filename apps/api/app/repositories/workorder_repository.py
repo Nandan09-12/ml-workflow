@@ -5,6 +5,7 @@ from datetime import date
 
 from sqlalchemy import func, select
 
+from app.core.enums import Region, WorkorderStatus
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_audit_log import SubmissionAuditLog
@@ -73,6 +74,43 @@ class WorkorderRepository(BaseRepository):
         result = await self.session.execute(query)
         row = result.one()
         return int(row[0]), int(row[1])
+
+    async def list_workorders(
+        self,
+        *,
+        region: Region | None = None,
+        status: WorkorderStatus | None = None,
+        workorder_code: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Workorder], int]:
+        query = select(Workorder)
+        if region is not None:
+            query = query.where(Workorder.region == region)
+        if status is not None:
+            query = query.where(Workorder.status == status)
+        if workorder_code is not None:
+            query = query.where(
+                Workorder.workorder_code_normalized.ilike(f"%{workorder_code.upper()}%")
+            )
+        if date_from is not None:
+            query = query.where(Workorder.created_at >= date_from)
+        if date_to is not None:
+            query = query.where(Workorder.created_at <= date_to)
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.session.execute(count_query)
+        total = int(count_result.scalar_one())
+        result = await self.session.execute(query.offset(offset).limit(limit))
+        return list(result.scalars().all()), total
+
+    async def list_submissions_by_workorder(
+        self, workorder_id: uuid.UUID
+    ) -> list[Submission]:
+        query = select(Submission).where(Submission.workorder_id == workorder_id)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[None]:

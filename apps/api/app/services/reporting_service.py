@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
+from app.core.enums import (
+    AccountStatus,
+    RequestedRole,
+    Shift,
+    SubmissionStatus,
+    WorkorderStatus,
+)
 from app.core.errors import AppError, ErrorCode
 from app.models.app_user import AppUser
 from app.models.submission import Submission
@@ -17,6 +23,8 @@ class DashboardSummaryView:
     ongoing_submissions: int
     completed_submissions: int
     no_submission_yet: int
+    active_workorders: int
+    completed_workorders: int
     reference_date: date
     date_from: date | None
     date_to: date | None
@@ -75,6 +83,12 @@ class ReportingRepositoryProtocol(Protocol):
         submission_ids: list[uuid.UUID],
     ) -> dict[uuid.UUID, int]: ...
 
+    async def count_workorders_by_status(self, *, status: WorkorderStatus) -> int: ...
+
+    async def get_workorders_by_submission_ids(
+        self, submission_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Any]: ...
+
 
 class ReportingService:
     def __init__(self, repository: ReportingRepositoryProtocol) -> None:
@@ -110,11 +124,19 @@ class ReportingService:
         no_submission_yet = await self._repository.count_approved_drive_testers_without_submission(
             work_date=reference_date
         )
+        active_workorders = await self._repository.count_workorders_by_status(
+            status=WorkorderStatus.ACTIVE
+        )
+        completed_workorders = await self._repository.count_workorders_by_status(
+            status=WorkorderStatus.COMPLETED
+        )
         return DashboardSummaryView(
             approved_drive_testers=approved_drive_testers,
             ongoing_submissions=ongoing_submissions,
             completed_submissions=completed_submissions,
             no_submission_yet=no_submission_yet,
+            active_workorders=active_workorders,
+            completed_workorders=completed_workorders,
             reference_date=reference_date,
             date_from=date_from,
             date_to=date_to,
@@ -164,7 +186,10 @@ class ReportingService:
         attachment_counts = await self._repository.count_active_attachments_for_submissions(
             [submission.id for submission in submissions]
         )
-        return self._build_csv(submissions, attachment_counts)
+        workorders_map = await self._repository.get_workorders_by_submission_ids(
+            [submission.id for submission in submissions]
+        )
+        return self._build_csv(submissions, attachment_counts, workorders_map)
 
     async def _require_approved_admin(self, auth_payload: dict[str, Any]) -> AppUser:
         auth_user_id = self._extract_auth_user_id(auth_payload)
@@ -234,7 +259,10 @@ class ReportingService:
     def _build_csv(
         submissions: list[Submission],
         attachment_counts: dict[uuid.UUID, int],
+        workorders_map: dict[uuid.UUID, Any] | None = None,
     ) -> str:
+        if workorders_map is None:
+            workorders_map = {}
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(
@@ -259,10 +287,15 @@ class ReportingService:
                 "created_at",
                 "updated_at",
                 "file_submission_pending",
+                "workorder_code",
+                "workorder_region",
+                "workorder_status",
+                "workorder_progress_percent",
             ]
         )
         for submission in submissions:
             active_attachments = attachment_counts.get(submission.id, 0)
+            wo = workorders_map.get(submission.id)
             writer.writerow(
                 [
                     str(submission.id),
@@ -290,6 +323,10 @@ class ReportingService:
                         active_attachment_count=active_attachments,
                     )
                     else "false",
+                    getattr(wo, "workorder_code", "") if wo else "",
+                    getattr(wo, "region", "") if wo else "",
+                    getattr(wo, "status", "") if wo else "",
+                    getattr(wo, "progress_percent", "") if wo else "",
                 ]
             )
         return buffer.getvalue()

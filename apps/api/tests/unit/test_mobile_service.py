@@ -91,3 +91,25 @@ async def test_mobile_service_rejects_invalid_auth_subject() -> None:
     assert exc.value.code.value == "UNAUTHORIZED"
     assert exc.value.status_code == 401
 
+
+# ---------------------------------------------------------------------------
+# Wave 2 RED tests — item 55: mobile bootstrap includes workorder_statuses
+# ---------------------------------------------------------------------------
+
+
+async def test_mobile_bootstrap_includes_workorder_statuses() -> None:
+    """Bootstrap reference_data must include workorder_statuses list."""
+    from app.core.enums import WorkorderStatus
+    repo = FakeMobileRepository()
+    service = MobileService(repository=repo)
+
+    payload = await service.get_bootstrap_payload(
+        {"sub": str(repo.user.auth_user_id), "email": repo.user.email}
+    )
+
+    assert hasattr(payload.reference_data, "workorder_statuses")
+    statuses = payload.reference_data.workorder_statuses
+    assert isinstance(statuses, list)
+    assert WorkorderStatus.ACTIVE.value in statuses
+    assert WorkorderStatus.COMPLETED.value in statuses
+

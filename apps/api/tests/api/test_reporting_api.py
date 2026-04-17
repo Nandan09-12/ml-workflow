@@ -14,6 +14,8 @@ class FakeDashboardSummaryView:
     ongoing_submissions: int
     completed_submissions: int
     no_submission_yet: int
+    active_workorders: int
+    completed_workorders: int
     reference_date: date
     date_from: date | None
     date_to: date | None
@@ -33,6 +35,8 @@ class FakeReportingService:
             ongoing_submissions=5,
             completed_submissions=7,
             no_submission_yet=3,
+            active_workorders=4,
+            completed_workorders=2,
             reference_date=date(2026, 4, 14),
             date_from=None,
             date_to=None,
@@ -133,6 +137,8 @@ def test_dashboard_summary_success_envelope(
     assert body["success"] is True
     assert body["data"]["approved_drive_testers"] == 12
     assert body["data"]["no_submission_yet"] == 3
+    assert body["data"]["active_workorders"] == 4
+    assert body["data"]["completed_workorders"] == 2
     assert service.last_work_date == date(2026, 4, 14)
 
 
