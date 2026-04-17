@@ -5,8 +5,11 @@ from typing import Any
 
 import pytest
 
-from app.api.v1.routers.submissions import get_submission_service
-from app.core.enums import Shift, SubmissionStatus, Zone
+from app.api.v1.routers.submissions import (
+    get_submission_service,
+    get_workorder_service_for_submissions,
+)
+from app.core.enums import Shift, SubmissionStatus
 from app.core.security import get_current_auth_payload
 
 
@@ -17,20 +20,18 @@ class FakeSubmissionView:
     owner_user_id: uuid.UUID
     submitter_name_snapshot: str
     submitter_email_snapshot: str
-    zone: Zone
+    workorder_id: uuid.UUID
     work_date: date
     shift: Shift
     team_number: str | None
     ticket_number: str | None
-    cluster_name: str
-    cluster_name_normalized: str
-    number_of_grids: int
     skipped_grids: int
     force_tested_grids: int
-    pending_grids: int
     completed_grids: int
     status: SubmissionStatus
     version_number: int
+    started_at: datetime
+    ended_at: datetime | None
     created_at: datetime
     updated_at: datetime
     file_submission_pending: bool
@@ -45,20 +46,18 @@ class FakeSubmissionService:
             owner_user_id=uuid.uuid4(),
             submitter_name_snapshot="Tester Name",
             submitter_email_snapshot="tester@example.com",
-            zone=Zone.NORTHEAST,
+            workorder_id=uuid.uuid4(),
             work_date=date(2026, 4, 14),
             shift=Shift.AM,
             team_number="11",
             ticket_number="TKT-1",
-            cluster_name="North-1",
-            cluster_name_normalized="NORTH 1",
-            number_of_grids=10,
             skipped_grids=1,
             force_tested_grids=0,
-            pending_grids=2,
             completed_grids=7,
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
             version_number=1,
+            started_at=now,
+            ended_at=None,
             created_at=now,
             updated_at=now,
             file_submission_pending=False,
@@ -77,7 +76,6 @@ class FakeSubmissionService:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         page: int = 1,
         page_size: int = 20,
@@ -110,6 +108,36 @@ class FakeSubmissionService:
         )
 
 
+class FakeWorkorderServiceForPost:
+    def __init__(self) -> None:
+        now = datetime.now(UTC)
+        self.item = FakeSubmissionView(
+            id=uuid.uuid4(),
+            client_generated_id=uuid.uuid4(),
+            owner_user_id=uuid.uuid4(),
+            submitter_name_snapshot="Tester Name",
+            submitter_email_snapshot="tester@example.com",
+            workorder_id=uuid.uuid4(),
+            work_date=date(2026, 4, 14),
+            shift=Shift.AM,
+            team_number="11",
+            ticket_number="TKT-1",
+            skipped_grids=0,
+            force_tested_grids=0,
+            completed_grids=0,
+            status=SubmissionStatus.IN_PROGRESS,
+            version_number=1,
+            started_at=now,
+            ended_at=None,
+            created_at=now,
+            updated_at=now,
+            file_submission_pending=False,
+        )
+
+    async def start_drive(self, _: dict[str, Any], __: Any) -> FakeSubmissionView:
+        return self.item
+
+
 @pytest.fixture
 def submission_service() -> FakeSubmissionService:
     return FakeSubmissionService()
@@ -128,33 +156,29 @@ def test_list_submissions_requires_auth(client: Any) -> None:
 def test_create_submission_success_response_envelope(
     client: Any,
     auth_payload_drive_tester: dict[str, Any],
-    submission_service: FakeSubmissionService,
 ) -> None:
+    workorder_service = FakeWorkorderServiceForPost()
     app = client.app
     app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_drive_tester
-    app.dependency_overrides[get_submission_service] = lambda: submission_service
+    app.dependency_overrides[get_workorder_service_for_submissions] = lambda: workorder_service
 
     response = client.post(
         "/api/v1/submissions",
         json={
-            "zone": "NORTHEAST",
+            "workorder_code": "WO-001",
+            "region": "NE_UP",
+            "total_grids": 10,
             "work_date": "2026-04-14",
             "shift": "AM",
             "team_number": "11",
             "ticket_number": "TKT-1",
-            "cluster_name": "North-1",
-            "number_of_grids": 10,
-            "skipped_grids": 1,
-            "force_tested_grids": 0,
-            "pending_grids": 2,
-            "completed_grids": 7,
         },
     )
     body = response.json()
 
     assert response.status_code == 201
     assert body["success"] is True
-    assert body["data"]["status"] == "ONGOING"
+    assert body["data"]["status"] == "IN_PROGRESS"
     assert body["data"]["file_submission_pending"] is False
     assert "request_id" in body["meta"]
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus, Zone
+from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
 from app.core.errors import AppError, ErrorCode
 from app.models.app_user import AppUser
 from app.models.submission import Submission
@@ -64,10 +64,8 @@ class ReportingRepositoryProtocol(Protocol):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
     ) -> list[Submission]: ...
@@ -93,7 +91,7 @@ class ReportingService:
         await self._require_approved_admin(auth_payload)
         approved_drive_testers = await self._repository.count_approved_drive_testers()
         ongoing_submissions = await self._repository.count_submissions_by_status(
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
             work_date=work_date,
             date_from=date_from,
             date_to=date_to,
@@ -147,10 +145,8 @@ class ReportingService:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
     ) -> str:
@@ -160,10 +156,8 @@ class ReportingService:
             date_from=date_from,
             date_to=date_to,
             status=status,
-            zone=zone,
             shift=shift,
             owner_user_id=owner_user_id,
-            cluster_name=cluster_name,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
         )
@@ -247,23 +241,21 @@ class ReportingService:
             [
                 "submission_id",
                 "client_generated_id",
+                "workorder_id",
                 "owner_user_id",
                 "submitter_name",
                 "submitter_email",
-                "zone",
                 "work_date",
                 "shift",
                 "team_number",
                 "ticket_number",
-                "cluster_name",
-                "cluster_name_normalized",
-                "number_of_grids",
                 "skipped_grids",
                 "force_tested_grids",
-                "pending_grids",
                 "completed_grids",
                 "status",
                 "version_number",
+                "started_at",
+                "ended_at",
                 "created_at",
                 "updated_at",
                 "file_submission_pending",
@@ -275,23 +267,21 @@ class ReportingService:
                 [
                     str(submission.id),
                     str(submission.client_generated_id),
+                    str(submission.workorder_id),
                     str(submission.owner_user_id),
                     submission.submitter_name_snapshot,
                     submission.submitter_email_snapshot,
-                    submission.zone.value,
                     submission.work_date.isoformat(),
                     submission.shift.value,
                     submission.team_number or "",
                     submission.ticket_number or "",
-                    submission.cluster_name,
-                    submission.cluster_name_normalized,
-                    submission.number_of_grids,
                     submission.skipped_grids,
                     submission.force_tested_grids,
-                    submission.pending_grids,
                     submission.completed_grids,
                     submission.status.value,
                     submission.version_number,
+                    submission.started_at.isoformat(),
+                    submission.ended_at.isoformat() if submission.ended_at else "",
                     submission.created_at.isoformat(),
                     submission.updated_at.isoformat(),
                     "true"

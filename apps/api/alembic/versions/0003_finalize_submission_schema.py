@@ -105,11 +105,12 @@ def upgrade() -> None:
 
     op.execute(
         """
-        ALTER TABLE submissions DROP COLUMN IF EXISTS zone;
-        ALTER TABLE submissions DROP COLUMN IF EXISTS cluster_name;
-        ALTER TABLE submissions DROP COLUMN IF EXISTS cluster_name_normalized;
-        ALTER TABLE submissions DROP COLUMN IF EXISTS number_of_grids;
-        ALTER TABLE submissions DROP COLUMN IF EXISTS pending_grids;
+        ALTER TABLE submissions
+        DROP COLUMN IF EXISTS zone,
+        DROP COLUMN IF EXISTS cluster_name,
+        DROP COLUMN IF EXISTS cluster_name_normalized,
+        DROP COLUMN IF EXISTS number_of_grids,
+        DROP COLUMN IF EXISTS pending_grids;
         """
     )
 

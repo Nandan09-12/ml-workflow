@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.core.config import Settings
-from app.core.enums import AccountStatus, AuditActionType, AuditSource, RequestedRole
+from app.core.enums import (
+    AccountStatus,
+    AuditActionType,
+    AuditSource,
+    RequestedRole,
+    SubmissionStatus,
+    WorkorderStatus,
+)
 from app.core.errors import AppError, ErrorCode
 from app.integrations.storage.base import (
     StorageIntegrationError,
@@ -15,6 +22,7 @@ from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,10 @@ class AttachmentRepositoryProtocol(Protocol):
 
     async def save_attachment(self, attachment: SubmissionAttachment) -> SubmissionAttachment: ...
 
+    async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None: ...
+
+    async def save_workorder(self, workorder: Workorder) -> Workorder: ...
+
     async def create_audit_log(self, log: SubmissionAuditLog) -> SubmissionAuditLog: ...
 
     def transaction(self) -> Any: ...
@@ -114,10 +126,9 @@ class AttachmentService:
         active_count = await self._repository.count_active_attachments(submission.id)
         if active_count >= self.MAX_ACTIVE_ATTACHMENTS:
             raise AppError(
-                ErrorCode.VALIDATION_ERROR,
-                "Maximum active attachments reached for this submission.",
-                status_code=400,
-                details={"max_active_attachments": self.MAX_ACTIVE_ATTACHMENTS},
+                ErrorCode.ACTIVE_ATTACHMENT_ALREADY_EXISTS,
+                "This submission already has an active attachment. Remove it before uploading a new one.",
+                status_code=409,
             )
 
         object_path = f"{submission.id}/{uuid.uuid4().hex}{extension}"
@@ -234,6 +245,21 @@ class AttachmentService:
                     changed_fields=["attachment_removed"],
                 )
             )
+
+            # If this was the last active file on a COMPLETED submission,
+            # and the parent workorder is COMPLETED, revert it to ACTIVE.
+            if submission.status == SubmissionStatus.COMPLETED:
+                remaining = await self._repository.count_active_attachments(submission.id)
+                if remaining == 0:
+                    workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+                    if workorder is not None and workorder.status == WorkorderStatus.COMPLETED:
+                        now2 = datetime.now(UTC)
+                        workorder.status = WorkorderStatus.ACTIVE
+                        workorder.completed_at = None
+                        workorder.completed_by_user_id = None
+                        workorder.updated_at = now2
+                        workorder.updated_by_user_id = actor.id
+                        await self._repository.save_workorder(workorder)
 
     async def _require_approved_user(self, auth_payload: dict[str, Any]) -> AppUser:
         auth_user_id = self._extract_auth_user_id(auth_payload)

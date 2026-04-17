@@ -1,4 +1,7 @@
-from app.core.workorder_cutover_guard import WorkorderCutoverFindings, format_cutover_report
+from app.core.workorder_cutover_guard import (
+    WorkorderCutoverFindings,
+    format_cutover_report,
+)
 
 
 def test_findings_are_clean_when_no_conflicts_exist() -> None:

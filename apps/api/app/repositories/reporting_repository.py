@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus, Zone
+from app.core.enums import AccountStatus, RequestedRole, Shift, SubmissionStatus
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
@@ -87,10 +87,8 @@ class ReportingRepository(BaseRepository):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
     ) -> list[Submission]:
@@ -103,10 +101,8 @@ class ReportingRepository(BaseRepository):
             date_from=date_from,
             date_to=date_to,
             status=status,
-            zone=zone,
             shift=shift,
             owner_user_id=owner_user_id,
-            cluster_name=cluster_name,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
         )

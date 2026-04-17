@@ -13,13 +13,14 @@ from app.core.enums import (
     RequestedRole,
     Shift,
     SubmissionStatus,
-    Zone,
+    WorkorderStatus,
 )
 from app.core.errors import AppError
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 from app.services.attachment_service import AttachmentService, AttachmentUpload
 
 
@@ -112,19 +113,17 @@ class FakeAttachmentRepository:
             owner_user_id=self.owner_user.id,
             submitter_name_snapshot=self.owner_user.full_name,
             submitter_email_snapshot=self.owner_user.email,
-            zone=Zone.NORTHEAST,
+            workorder_id=uuid.uuid4(),
             work_date=date(2026, 4, 14),
             shift=Shift.AM,
             team_number="11",
             ticket_number="TKT-1",
-            cluster_name="Cluster A",
-            cluster_name_normalized="CLUSTER A",
-            number_of_grids=10,
             skipped_grids=1,
             force_tested_grids=0,
-            pending_grids=2,
             completed_grids=7,
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
+            started_at=now,
+            ended_at=None,
             created_at=now,
             created_by_user_id=self.owner_user.id,
             updated_at=now,
@@ -132,6 +131,7 @@ class FakeAttachmentRepository:
             version_number=1,
         )
         self.submissions = [self.submission]
+        self.workorders: dict[uuid.UUID, Workorder] = {}
         self.attachments: list[SubmissionAttachment] = []
         self.audit_logs: list[SubmissionAuditLog] = []
         self.transaction_entries = 0
@@ -170,6 +170,13 @@ class FakeAttachmentRepository:
     async def save_attachment(self, attachment: SubmissionAttachment) -> SubmissionAttachment:
         return attachment
 
+    async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None:
+        return self.workorders.get(workorder_id)
+
+    async def save_workorder(self, workorder: Workorder) -> Workorder:
+        self.workorders[workorder.id] = workorder
+        return workorder
+
     async def create_audit_log(self, log: SubmissionAuditLog) -> SubmissionAuditLog:
         self.audit_logs.append(log)
         return log
@@ -182,6 +189,29 @@ class FakeAttachmentRepository:
 
 def _auth_payload(user: AppUser) -> dict[str, Any]:
     return {"sub": str(user.auth_user_id), "email": user.email}
+
+
+def _workorder(
+    owner_user_id: uuid.UUID,
+    *,
+    total_grids: int = 20,
+    status: WorkorderStatus = WorkorderStatus.ACTIVE,
+) -> Workorder:
+    now = datetime.now(UTC)
+    return Workorder(
+        id=uuid.uuid4(),
+        workorder_code="WO-UNIT",
+        workorder_code_normalized="WO-UNIT",
+        region=None,  # not needed for these tests
+        total_grids=total_grids,
+        status=status,
+        created_at=now,
+        created_by_user_id=owner_user_id,
+        updated_at=now,
+        updated_by_user_id=owner_user_id,
+        completed_at=None,
+        completed_by_user_id=None,
+    )
 
 
 def _settings() -> Settings:
@@ -304,9 +334,8 @@ async def test_upload_attachment_rejects_when_active_count_reaches_limit() -> No
             _upload(),
         )
 
-    assert exc.value.code.value == "VALIDATION_ERROR"
-    assert exc.value.status_code == 400
-    assert exc.value.details == {"max_active_attachments": 1}
+    assert exc.value.code.value == "ACTIVE_ATTACHMENT_ALREADY_EXISTS"
+    assert exc.value.status_code == 409
 
 
 async def test_upload_attachment_allows_admin_on_foreign_submission() -> None:
@@ -445,3 +474,140 @@ async def test_attachment_actions_require_approved_account() -> None:
 
     assert exc.value.code.value == "ACCOUNT_NOT_APPROVED"
     assert exc.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# RED tests — upload: use ACTIVE_ATTACHMENT_ALREADY_EXISTS code
+# ---------------------------------------------------------------------------
+
+
+async def test_upload_attachment_rejects_second_active_with_correct_error_code() -> None:
+    repo = FakeAttachmentRepository()
+    storage = FakeAttachmentStorage()
+    service = AttachmentService(repository=repo, storage=storage, settings=_settings())
+    existing = SubmissionAttachment(
+        id=uuid.uuid4(),
+        submission_id=repo.submission.id,
+        file_name="existing.csv",
+        bucket_name="attachments",
+        object_path=f"{repo.submission.id}/existing.csv",
+        mime_type="text/csv",
+        file_extension=".csv",
+        file_size_bytes=128,
+        uploaded_by_user_id=repo.owner_user.id,
+        uploaded_at=datetime.now(UTC),
+        is_active=True,
+    )
+    repo.attachments.append(existing)
+
+    with pytest.raises(AppError) as exc:
+        await service.upload_attachment(
+            _auth_payload(repo.owner_user),
+            repo.submission.id,
+            _upload(),
+        )
+
+    assert exc.value.code.value == "ACTIVE_ATTACHMENT_ALREADY_EXISTS"
+    assert exc.value.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# RED tests — delete_attachment: parent workorder cascade
+# ---------------------------------------------------------------------------
+
+
+async def _make_completed_submission_with_attachment(
+    repo: FakeAttachmentRepository,
+) -> SubmissionAttachment:
+    """Set repo.submission to COMPLETED and add one active attachment."""
+    now = datetime.now(UTC)
+    repo.submission.status = SubmissionStatus.COMPLETED
+    attachment = SubmissionAttachment(
+        id=uuid.uuid4(),
+        submission_id=repo.submission.id,
+        file_name="report.csv",
+        bucket_name="attachments",
+        object_path=f"{repo.submission.id}/report.csv",
+        mime_type="text/csv",
+        file_extension=".csv",
+        file_size_bytes=128,
+        uploaded_by_user_id=repo.owner_user.id,
+        uploaded_at=now,
+        is_active=True,
+    )
+    repo.attachments.append(attachment)
+    return attachment
+
+
+async def test_delete_last_attachment_reverts_completed_workorder_to_active() -> None:
+    repo = FakeAttachmentRepository()
+    storage = FakeAttachmentStorage()
+    service = AttachmentService(repository=repo, storage=storage, settings=_settings())
+
+    wo = _workorder(repo.owner_user.id, status=WorkorderStatus.COMPLETED)
+    repo.submission.workorder_id = wo.id
+    repo.workorders[wo.id] = wo
+    attachment = await _make_completed_submission_with_attachment(repo)
+
+    await service.delete_attachment(_auth_payload(repo.owner_user), attachment.id)
+
+    assert attachment.is_active is False
+    assert wo.status == WorkorderStatus.ACTIVE
+
+
+async def test_delete_attachment_does_not_revert_workorder_if_still_has_active_file() -> None:
+    """If there is a second active file still remaining, parent stays COMPLETED."""
+    repo = FakeAttachmentRepository()
+    storage = FakeAttachmentStorage()
+    service = AttachmentService(repository=repo, storage=storage, settings=_settings())
+
+    wo = _workorder(repo.owner_user.id, status=WorkorderStatus.COMPLETED)
+    repo.submission.workorder_id = wo.id
+    repo.workorders[wo.id] = wo
+    repo.submission.status = SubmissionStatus.COMPLETED
+
+    now = datetime.now(UTC)
+    att1 = SubmissionAttachment(
+        id=uuid.uuid4(), submission_id=repo.submission.id, file_name="a.csv",
+        bucket_name="attachments", object_path=f"{repo.submission.id}/a.csv",
+        mime_type="text/csv", file_extension=".csv", file_size_bytes=10,
+        uploaded_by_user_id=repo.owner_user.id, uploaded_at=now, is_active=True,
+    )
+    att2 = SubmissionAttachment(
+        id=uuid.uuid4(), submission_id=repo.submission.id, file_name="b.csv",
+        bucket_name="attachments", object_path=f"{repo.submission.id}/b.csv",
+        mime_type="text/csv", file_extension=".csv", file_size_bytes=10,
+        uploaded_by_user_id=repo.owner_user.id, uploaded_at=now, is_active=True,
+    )
+    repo.attachments.extend([att1, att2])
+
+    await service.delete_attachment(_auth_payload(repo.owner_user), att1.id)
+
+    assert att1.is_active is False
+    assert wo.status == WorkorderStatus.COMPLETED  # still has att2
+
+
+async def test_delete_attachment_on_non_completed_submission_no_workorder_change() -> None:
+    """If submission is IN_PROGRESS/CHECKED_OUT, parent workorder status left untouched."""
+    repo = FakeAttachmentRepository()
+    storage = FakeAttachmentStorage()
+    service = AttachmentService(repository=repo, storage=storage, settings=_settings())
+
+    wo = _workorder(repo.owner_user.id, status=WorkorderStatus.ACTIVE)
+    repo.submission.workorder_id = wo.id
+    repo.workorders[wo.id] = wo
+    repo.submission.status = SubmissionStatus.CHECKED_OUT  # not completed
+
+    now = datetime.now(UTC)
+    att = SubmissionAttachment(
+        id=uuid.uuid4(), submission_id=repo.submission.id, file_name="report.csv",
+        bucket_name="attachments", object_path=f"{repo.submission.id}/report.csv",
+        mime_type="text/csv", file_extension=".csv", file_size_bytes=10,
+        uploaded_by_user_id=repo.owner_user.id, uploaded_at=now, is_active=True,
+    )
+    repo.attachments.append(att)
+
+    await service.delete_attachment(_auth_payload(repo.owner_user), att.id)
+
+    assert att.is_active is False
+    assert wo.status == WorkorderStatus.ACTIVE  # unchanged

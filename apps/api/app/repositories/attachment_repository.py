@@ -9,6 +9,7 @@ from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 
 
 class AttachmentRepository:
@@ -60,6 +61,16 @@ class AttachmentRepository:
         self._session.add(attachment)
         await self._session.flush()
         return attachment
+
+    async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None:
+        query = select(Workorder).where(Workorder.id == workorder_id)
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def save_workorder(self, workorder: Workorder) -> Workorder:
+        self._session.add(workorder)
+        await self._session.flush()
+        return workorder
 
     async def create_audit_log(self, log: SubmissionAuditLog) -> SubmissionAuditLog:
         self._session.add(log)

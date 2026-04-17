@@ -1,10 +1,7 @@
-import re
-import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Protocol
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 
@@ -15,12 +12,13 @@ from app.core.enums import (
     RequestedRole,
     Shift,
     SubmissionStatus,
-    Zone,
+    WorkorderStatus,
 )
 from app.core.errors import AppError, ErrorCode
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_audit_log import SubmissionAuditLog
+from app.models.workorder import Workorder
 from app.schemas.submissions import CreateSubmissionRequest, UpdateSubmissionRequest
 
 
@@ -28,23 +26,21 @@ from app.schemas.submissions import CreateSubmissionRequest, UpdateSubmissionReq
 class SubmissionView:
     id: uuid.UUID
     client_generated_id: uuid.UUID
+    workorder_id: uuid.UUID
     owner_user_id: uuid.UUID
     submitter_name_snapshot: str
     submitter_email_snapshot: str
-    zone: Zone
     work_date: date
     shift: Shift
     team_number: str | None
     ticket_number: str | None
-    cluster_name: str
-    cluster_name_normalized: str
-    number_of_grids: int
     skipped_grids: int
     force_tested_grids: int
-    pending_grids: int
     completed_grids: int
     status: SubmissionStatus
     version_number: int
+    started_at: datetime
+    ended_at: datetime | None
     created_at: datetime
     updated_at: datetime
     file_submission_pending: bool
@@ -67,13 +63,11 @@ class SubmissionAuditView:
 class SubmissionRepositoryProtocol(Protocol):
     async def get_by_auth_user_id(self, auth_user_id: uuid.UUID) -> AppUser | None: ...
 
-    async def get_duplicate_for_owner(
+    async def get_submission_by_workorder_date(
         self,
         *,
-        owner_user_id: uuid.UUID,
+        workorder_id: uuid.UUID,
         work_date: date,
-        shift: Shift,
-        cluster_name_normalized: str,
         exclude_submission_id: uuid.UUID | None = None,
     ) -> Submission | None: ...
 
@@ -87,7 +81,6 @@ class SubmissionRepositoryProtocol(Protocol):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         offset: int = 0,
         limit: int = 20,
@@ -100,10 +93,8 @@ class SubmissionRepositoryProtocol(Protocol):
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
         offset: int = 0,
@@ -125,16 +116,24 @@ class SubmissionRepositoryProtocol(Protocol):
         submission_ids: list[uuid.UUID],
     ) -> dict[uuid.UUID, int]: ...
 
+    async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None: ...
+
+    async def save_workorder(self, workorder: Workorder) -> Workorder: ...
+
+    async def get_aggregate_progress(self, workorder_id: uuid.UUID) -> tuple[int, int]: ...
+
+    async def get_workorders_by_ids(
+        self, workorder_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Workorder]: ...
+
+    async def get_aggregate_progress_batch(
+        self, workorder_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, tuple[int, int]]: ...
+
     def transaction(self) -> Any: ...
 
 
 class SubmissionService:
-    _ZONE_TIMEZONES: dict[Zone, str] = {
-        Zone.NORTHEAST: "America/New_York",
-        Zone.SOUTH_FLORIDA: "America/New_York",
-        Zone.CENTRAL: "America/Chicago",
-    }
-
     def __init__(self, repository: SubmissionRepositoryProtocol) -> None:
         self._repository = repository
 
@@ -144,27 +143,20 @@ class SubmissionService:
         request: CreateSubmissionRequest,
     ) -> SubmissionView:
         actor = await self._require_approved_user(auth_payload)
-        cluster_name = request.cluster_name.strip()
-        cluster_name_normalized = self._normalize_cluster_name(cluster_name)
-        self._validate_work_date(zone=request.zone, work_date=request.work_date)
-        self._validate_grid_math(
-            number_of_grids=request.number_of_grids,
+        self._validate_grids(
             skipped_grids=request.skipped_grids,
             force_tested_grids=request.force_tested_grids,
-            pending_grids=request.pending_grids,
             completed_grids=request.completed_grids,
         )
 
-        duplicate = await self._repository.get_duplicate_for_owner(
-            owner_user_id=actor.id,
+        duplicate = await self._repository.get_submission_by_workorder_date(
+            workorder_id=request.workorder_id,
             work_date=request.work_date,
-            shift=request.shift,
-            cluster_name_normalized=cluster_name_normalized,
         )
         if duplicate is not None:
             raise AppError(
                 ErrorCode.SUBMISSION_ALREADY_EXISTS,
-                "Submission already exists for the same owner, date, shift, and cluster.",
+                "A submission already exists for this workorder on that date.",
                 status_code=409,
             )
 
@@ -172,22 +164,20 @@ class SubmissionService:
         submission = Submission(
             id=uuid.uuid4(),
             client_generated_id=request.client_generated_id or uuid.uuid4(),
+            workorder_id=request.workorder_id,
             owner_user_id=actor.id,
             submitter_name_snapshot=actor.full_name,
             submitter_email_snapshot=actor.email,
-            zone=request.zone,
             work_date=request.work_date,
             shift=request.shift,
             team_number=self._normalize_optional_text(request.team_number),
             ticket_number=self._normalize_optional_text(request.ticket_number),
-            cluster_name=cluster_name,
-            cluster_name_normalized=cluster_name_normalized,
-            number_of_grids=request.number_of_grids,
             skipped_grids=request.skipped_grids,
             force_tested_grids=request.force_tested_grids,
-            pending_grids=request.pending_grids,
             completed_grids=request.completed_grids,
-            status=SubmissionStatus.ONGOING,
+            status=SubmissionStatus.IN_PROGRESS,
+            started_at=now,
+            ended_at=None,
             created_at=now,
             created_by_user_id=actor.id,
             updated_at=now,
@@ -204,19 +194,16 @@ class SubmissionService:
                         action_type=AuditActionType.CREATED,
                         actor=actor,
                         changed_fields=[
-                            "zone",
+                            "workorder_id",
                             "work_date",
                             "shift",
                             "team_number",
                             "ticket_number",
-                            "cluster_name",
-                            "cluster_name_normalized",
-                            "number_of_grids",
                             "skipped_grids",
                             "force_tested_grids",
-                            "pending_grids",
                             "completed_grids",
                             "status",
+                            "started_at",
                             "version_number",
                         ],
                     )
@@ -224,12 +211,49 @@ class SubmissionService:
         except IntegrityError as exc:
             raise AppError(
                 ErrorCode.SUBMISSION_ALREADY_EXISTS,
-                "Submission already exists for the same owner, date, shift, and cluster.",
+                "A submission already exists for this workorder on that date.",
                 status_code=409,
             ) from exc
 
         active_attachments = await self._repository.count_active_attachments(created.id)
         return self._to_view(created, active_attachment_count=active_attachments)
+
+    async def end_drive(
+        self,
+        auth_payload: dict[str, Any],
+        submission_id: uuid.UUID,
+    ) -> SubmissionView:
+        actor = await self._require_approved_user(auth_payload)
+        async with self._repository.transaction():
+            submission = await self._repository.get_submission_by_id(submission_id)
+            if submission is None:
+                raise AppError(ErrorCode.NOT_FOUND, "Submission was not found.", status_code=404)
+            self._assert_owner(actor, submission)
+            if submission.status != SubmissionStatus.IN_PROGRESS:
+                raise AppError(
+                    ErrorCode.SUBMISSION_NOT_CHECKED_OUT,
+                    "Only in-progress submissions can be ended.",
+                    status_code=400,
+                )
+
+            now = datetime.now(UTC)
+            submission.status = SubmissionStatus.CHECKED_OUT
+            submission.ended_at = now
+            submission.updated_at = now
+            submission.updated_by_user_id = actor.id
+            submission.version_number += 1
+            await self._repository.save_submission(submission)
+            await self._repository.create_audit_log(
+                self._build_audit_log(
+                    submission_id=submission.id,
+                    action_type=AuditActionType.STATUS_CHANGED,
+                    actor=actor,
+                    changed_fields=["status", "ended_at", "version_number"],
+                )
+            )
+
+        active_attachments = await self._repository.count_active_attachments(submission.id)
+        return self._to_view(submission, active_attachment_count=active_attachments)
 
     async def list_my_submissions(
         self,
@@ -239,7 +263,6 @@ class SubmissionService:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         page: int = 1,
         page_size: int = 20,
@@ -252,7 +275,6 @@ class SubmissionService:
             date_from=date_from,
             date_to=date_to,
             status=status,
-            zone=zone,
             shift=shift,
             offset=offset,
             limit=page_size,
@@ -291,10 +313,10 @@ class SubmissionService:
             if submission is None:
                 raise AppError(ErrorCode.NOT_FOUND, "Submission was not found.", status_code=404)
             self._assert_owner(actor, submission)
-            if submission.status != SubmissionStatus.ONGOING:
+            if submission.status not in (SubmissionStatus.IN_PROGRESS, SubmissionStatus.CHECKED_OUT):
                 raise AppError(
                     ErrorCode.SUBMISSION_ALREADY_COMPLETED,
-                    "Completed submissions cannot be edited.",
+                    "Only in-progress or checked-out submissions can be edited.",
                     status_code=400,
                 )
             if submission.version_number != request.version_number:
@@ -304,29 +326,39 @@ class SubmissionService:
                     status_code=409,
                 )
 
+            old_completed = submission.completed_grids
+            old_skipped = submission.skipped_grids
             changed_fields = self._apply_updates(submission, request)
             if changed_fields:
-                self._validate_work_date(zone=submission.zone, work_date=submission.work_date)
-                self._validate_grid_math(
-                    number_of_grids=submission.number_of_grids,
+                self._validate_grids(
                     skipped_grids=submission.skipped_grids,
                     force_tested_grids=submission.force_tested_grids,
-                    pending_grids=submission.pending_grids,
                     completed_grids=submission.completed_grids,
                 )
-                duplicate = await self._repository.get_duplicate_for_owner(
-                    owner_user_id=submission.owner_user_id,
+                duplicate = await self._repository.get_submission_by_workorder_date(
+                    workorder_id=submission.workorder_id,
                     work_date=submission.work_date,
-                    shift=submission.shift,
-                    cluster_name_normalized=submission.cluster_name_normalized,
                     exclude_submission_id=submission.id,
                 )
                 if duplicate is not None:
                     raise AppError(
                         ErrorCode.SUBMISSION_ALREADY_EXISTS,
-                        "Submission already exists for the same owner, date, shift, and cluster.",
+                        "A submission already exists for this workorder on that date.",
                         status_code=409,
                     )
+
+                # Aggregate cap check
+                workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+                if workorder is not None:
+                    agg = await self._repository.get_aggregate_progress(submission.workorder_id)
+                    old_sum = old_completed + old_skipped
+                    new_sum = submission.completed_grids + submission.skipped_grids
+                    if (agg[0] + agg[1]) - old_sum + new_sum > workorder.total_grids:
+                        raise AppError(
+                            ErrorCode.WORKORDER_PROGRESS_EXCEEDS_TOTAL,
+                            "Updated grid values would exceed the workorder total.",
+                            status_code=400,
+                        )
 
                 now = datetime.now(UTC)
                 submission.version_number += 1
@@ -356,21 +388,38 @@ class SubmissionService:
             if submission is None:
                 raise AppError(ErrorCode.NOT_FOUND, "Submission was not found.", status_code=404)
             self._assert_owner(actor, submission)
-            if submission.status == SubmissionStatus.COMPLETED:
+            if submission.status != SubmissionStatus.CHECKED_OUT:
                 raise AppError(
-                    ErrorCode.SUBMISSION_ALREADY_COMPLETED,
-                    "Submission is already completed.",
-                    status_code=400,
-                )
-            if submission.pending_grids != 0:
-                raise AppError(
-                    ErrorCode.PENDING_GRIDS_MUST_BE_ZERO,
-                    "pending_grids must be 0 before completion.",
+                    ErrorCode.SUBMISSION_NOT_CHECKED_OUT,
+                    "Only checked-out submissions can be completed.",
                     status_code=400,
                 )
 
+            # Attachment required
+            active_attachments = await self._repository.count_active_attachments(submission.id)
+            if active_attachments == 0:
+                raise AppError(
+                    ErrorCode.ATTACHMENT_REQUIRED,
+                    "At least one attachment is required before completing a submission.",
+                    status_code=400,
+                )
+
+            # Aggregate cap check
+            workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+            agg_total = 0
+            if workorder is not None:
+                agg = await self._repository.get_aggregate_progress(submission.workorder_id)
+                agg_total = agg[0] + agg[1]
+                if agg_total > workorder.total_grids:
+                    raise AppError(
+                        ErrorCode.WORKORDER_PROGRESS_EXCEEDS_TOTAL,
+                        "Submission grids exceed the workorder total.",
+                        status_code=400,
+                    )
+
             now = datetime.now(UTC)
             submission.status = SubmissionStatus.COMPLETED
+            submission.ended_at = now
             submission.completed_at = now
             submission.completed_by_user_id = actor.id
             submission.updated_at = now
@@ -384,6 +433,7 @@ class SubmissionService:
                     actor=actor,
                     changed_fields=[
                         "status",
+                        "ended_at",
                         "completed_at",
                         "completed_by_user_id",
                         "version_number",
@@ -391,7 +441,14 @@ class SubmissionService:
                 )
             )
 
-        active_attachments = await self._repository.count_active_attachments(submission.id)
+            # Auto-complete parent workorder when grids are fully accounted for
+            if workorder is not None and agg_total >= workorder.total_grids:
+                now2 = datetime.now(UTC)
+                workorder.status = WorkorderStatus.COMPLETED
+                workorder.completed_at = now2
+                workorder.completed_by_user_id = actor.id
+                await self._repository.save_workorder(workorder)
+
         return self._to_view(submission, active_attachment_count=active_attachments)
 
     async def reopen_submission(
@@ -412,7 +469,7 @@ class SubmissionService:
                 )
 
             now = datetime.now(UTC)
-            submission.status = SubmissionStatus.ONGOING
+            submission.status = SubmissionStatus.CHECKED_OUT
             submission.reopened_at = now
             submission.reopened_by_user_id = actor.id
             submission.updated_at = now
@@ -433,6 +490,17 @@ class SubmissionService:
                 )
             )
 
+            # Cascade: if parent workorder was COMPLETED, revert to ACTIVE
+            workorder = await self._repository.get_workorder_by_id(submission.workorder_id)
+            if workorder is not None and workorder.status == WorkorderStatus.COMPLETED:
+                now2 = datetime.now(UTC)
+                workorder.status = WorkorderStatus.ACTIVE
+                workorder.completed_at = None
+                workorder.completed_by_user_id = None
+                workorder.updated_at = now2
+                workorder.updated_by_user_id = actor.id
+                await self._repository.save_workorder(workorder)
+
         active_attachments = await self._repository.count_active_attachments(submission.id)
         return self._to_view(submission, active_attachment_count=active_attachments)
 
@@ -444,10 +512,8 @@ class SubmissionService:
         date_from: date | None = None,
         date_to: date | None = None,
         status: SubmissionStatus | None = None,
-        zone: Zone | None = None,
         shift: Shift | None = None,
         owner_user_id: uuid.UUID | None = None,
-        cluster_name: str | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
         page: int = 1,
@@ -460,10 +526,8 @@ class SubmissionService:
             date_from=date_from,
             date_to=date_to,
             status=status,
-            zone=zone,
             shift=shift,
             owner_user_id=owner_user_id,
-            cluster_name=cluster_name,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
             offset=offset,
@@ -509,34 +573,20 @@ class SubmissionService:
 
             changed_fields = self._apply_updates(submission, request)
             if changed_fields:
-                self._validate_work_date(zone=submission.zone, work_date=submission.work_date)
-                self._validate_grid_math(
-                    number_of_grids=submission.number_of_grids,
+                self._validate_grids(
                     skipped_grids=submission.skipped_grids,
                     force_tested_grids=submission.force_tested_grids,
-                    pending_grids=submission.pending_grids,
                     completed_grids=submission.completed_grids,
                 )
-                if (
-                    submission.status == SubmissionStatus.COMPLETED
-                    and submission.pending_grids != 0
-                ):
-                    raise AppError(
-                        ErrorCode.PENDING_GRIDS_MUST_BE_ZERO,
-                        "pending_grids must remain 0 while submission is completed.",
-                        status_code=400,
-                    )
-                duplicate = await self._repository.get_duplicate_for_owner(
-                    owner_user_id=submission.owner_user_id,
+                duplicate = await self._repository.get_submission_by_workorder_date(
+                    workorder_id=submission.workorder_id,
                     work_date=submission.work_date,
-                    shift=submission.shift,
-                    cluster_name_normalized=submission.cluster_name_normalized,
                     exclude_submission_id=submission.id,
                 )
                 if duplicate is not None:
                     raise AppError(
                         ErrorCode.SUBMISSION_ALREADY_EXISTS,
-                        "Submission already exists for the same owner, date, shift, and cluster.",
+                        "A submission already exists for this workorder on that date.",
                         status_code=409,
                     )
                 now = datetime.now(UTC)
@@ -573,12 +623,6 @@ class SubmissionService:
         fields_set = set(request.model_fields_set)
         fields_set.discard("version_number")
 
-        if "zone" in fields_set:
-            assert request.zone is not None
-            if request.zone != submission.zone:
-                submission.zone = request.zone
-                changed_fields.add("zone")
-
         if "work_date" in fields_set:
             assert request.work_date is not None
             if request.work_date != submission.work_date:
@@ -603,30 +647,7 @@ class SubmissionService:
                 submission.ticket_number = normalized_ticket
                 changed_fields.add("ticket_number")
 
-        if "cluster_name" in fields_set:
-            if request.cluster_name is None:
-                raise AppError(
-                    ErrorCode.VALIDATION_ERROR,
-                    "cluster_name cannot be null.",
-                    status_code=400,
-                )
-            cluster_name = request.cluster_name.strip()
-            normalized_cluster = self._normalize_cluster_name(cluster_name)
-            if cluster_name != submission.cluster_name:
-                submission.cluster_name = cluster_name
-                changed_fields.add("cluster_name")
-            if normalized_cluster != submission.cluster_name_normalized:
-                submission.cluster_name_normalized = normalized_cluster
-                changed_fields.add("cluster_name_normalized")
-
-        numeric_fields = (
-            "number_of_grids",
-            "skipped_grids",
-            "force_tested_grids",
-            "pending_grids",
-            "completed_grids",
-        )
-        for field in numeric_fields:
+        for field in ("skipped_grids", "force_tested_grids", "completed_grids"):
             if field not in fields_set:
                 continue
             value = getattr(request, field)
@@ -704,52 +725,17 @@ class SubmissionService:
         return normalized if normalized else None
 
     @staticmethod
-    def _normalize_cluster_name(cluster_name: str) -> str:
-        normalized = unicodedata.normalize("NFKC", cluster_name)
-        normalized = normalized.strip()
-        normalized = normalized.replace("-", " ").replace("_", " ")
-        normalized = re.sub(r"\s+", " ", normalized)
-        normalized = normalized.upper()
-        if not normalized:
-            raise AppError(
-                ErrorCode.VALIDATION_ERROR,
-                "cluster_name cannot be empty.",
-                status_code=400,
-            )
-        return normalized
-
-    def _validate_work_date(self, *, zone: Zone, work_date: date) -> None:
-        timezone = ZoneInfo(self._ZONE_TIMEZONES[zone])
-        zone_today = datetime.now(timezone).date()
-        if work_date > zone_today:
-            raise AppError(
-                ErrorCode.VALIDATION_ERROR,
-                "work_date cannot be in the future for the selected zone.",
-                status_code=400,
-                details={
-                    "zone": zone.value,
-                    "zone_current_date": zone_today.isoformat(),
-                    "work_date": work_date.isoformat(),
-                },
-            )
-
-    @staticmethod
-    def _validate_grid_math(
+    def _validate_grids(
         *,
-        number_of_grids: int,
         skipped_grids: int,
         force_tested_grids: int,
-        pending_grids: int,
         completed_grids: int,
     ) -> None:
-        values = {
-            "number_of_grids": number_of_grids,
-            "skipped_grids": skipped_grids,
-            "force_tested_grids": force_tested_grids,
-            "pending_grids": pending_grids,
-            "completed_grids": completed_grids,
-        }
-        for field, value in values.items():
+        for field, value in (
+            ("skipped_grids", skipped_grids),
+            ("force_tested_grids", force_tested_grids),
+            ("completed_grids", completed_grids),
+        ):
             if value < 0:
                 raise AppError(
                     ErrorCode.INVALID_GRID_MATH,
@@ -758,38 +744,13 @@ class SubmissionService:
                     details={"field": field, "value": value},
                 )
 
-        if skipped_grids > number_of_grids:
-            raise AppError(
-                ErrorCode.INVALID_GRID_MATH,
-                "skipped_grids cannot exceed number_of_grids.",
-                status_code=400,
-            )
-        if pending_grids > number_of_grids:
-            raise AppError(
-                ErrorCode.INVALID_GRID_MATH,
-                "pending_grids cannot exceed number_of_grids.",
-                status_code=400,
-            )
-        if completed_grids > number_of_grids:
-            raise AppError(
-                ErrorCode.INVALID_GRID_MATH,
-                "completed_grids cannot exceed number_of_grids.",
-                status_code=400,
-            )
-        if completed_grids + pending_grids + skipped_grids != number_of_grids:
-            raise AppError(
-                ErrorCode.INVALID_GRID_MATH,
-                "completed_grids + pending_grids + skipped_grids must equal number_of_grids.",
-                status_code=400,
-            )
-
     @staticmethod
     def _is_file_submission_pending(
         *,
         status: SubmissionStatus,
         active_attachment_count: int,
     ) -> bool:
-        return status == SubmissionStatus.COMPLETED and active_attachment_count == 0
+        return status == SubmissionStatus.CHECKED_OUT and active_attachment_count == 0
 
     @staticmethod
     def _build_audit_log(
@@ -825,23 +786,21 @@ class SubmissionService:
         return SubmissionView(
             id=submission.id,
             client_generated_id=submission.client_generated_id,
+            workorder_id=submission.workorder_id,
             owner_user_id=submission.owner_user_id,
             submitter_name_snapshot=submission.submitter_name_snapshot,
             submitter_email_snapshot=submission.submitter_email_snapshot,
-            zone=submission.zone,
             work_date=submission.work_date,
             shift=submission.shift,
             team_number=submission.team_number,
             ticket_number=submission.ticket_number,
-            cluster_name=submission.cluster_name,
-            cluster_name_normalized=submission.cluster_name_normalized,
-            number_of_grids=submission.number_of_grids,
             skipped_grids=submission.skipped_grids,
             force_tested_grids=submission.force_tested_grids,
-            pending_grids=submission.pending_grids,
             completed_grids=submission.completed_grids,
             status=submission.status,
             version_number=submission.version_number,
+            started_at=submission.started_at,
+            ended_at=submission.ended_at,
             created_at=submission.created_at,
             updated_at=submission.updated_at,
             file_submission_pending=self._is_file_submission_pending(

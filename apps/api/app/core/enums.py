@@ -31,7 +31,8 @@ class Shift(StrEnum):
 
 
 class SubmissionStatus(StrEnum):
-    ONGOING = "ONGOING"
+    IN_PROGRESS = "IN_PROGRESS"
+    CHECKED_OUT = "CHECKED_OUT"
     COMPLETED = "COMPLETED"
 
 

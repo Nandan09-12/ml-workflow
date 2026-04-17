@@ -9,6 +9,7 @@ from app.api.v1.routers import (
     mobile,
     reporting,
     submissions,
+    workorders,
 )
 
 api_v1_router = APIRouter()
@@ -20,3 +21,4 @@ api_v1_router.include_router(admin_submissions.router)
 api_v1_router.include_router(attachments.router)
 api_v1_router.include_router(reporting.router)
 api_v1_router.include_router(mobile.router)
+api_v1_router.include_router(workorders.router)
