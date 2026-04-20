@@ -30,12 +30,30 @@ class SupabaseJWTVerifier:
                 detail="Token header does not include kid.",
             )
 
+        header_alg = header.get("alg")
+        if not isinstance(header_alg, str) or not header_alg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token header does not include alg.",
+            )
+
         jwk_key = await self._get_key(kid)
+        key_alg = jwk_key.get("alg")
+        if isinstance(key_alg, str) and key_alg and key_alg != header_alg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token algorithm does not match signing key.",
+            )
+
+        decode_alg = (
+            key_alg if isinstance(key_alg, str) and key_alg else header_alg
+        )
+
         try:
             payload = jwt.decode(
                 token,
                 jwk_key,
-                algorithms=["RS256"],
+                algorithms=[decode_alg],
                 audience=self._settings.supabase_jwt_audience,
             )
         except JWTError as exc:
@@ -62,7 +80,9 @@ class SupabaseJWTVerifier:
 
         assert self._settings.resolved_supabase_jwks_url is not None
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(self._settings.resolved_supabase_jwks_url)
+            response = await client.get(
+                self._settings.resolved_supabase_jwks_url
+            )
             response.raise_for_status()
             self._cached_jwks = response.json()
             return self._cached_jwks
