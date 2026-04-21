@@ -1,10 +1,30 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: devdb
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d devdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
   app:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
       args:
         - DEV=true
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -12,22 +32,8 @@ services:
     env_file:
       - ./apps/api/.env
     command: >
-      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-
-  admin-web:
-    build:
-      context: .
-      dockerfile: apps/admin-web/Dockerfile
-    working_dir: /app/apps/admin-web
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./:/app
-      - admin-web-node-modules:/app/node_modules
-      - admin-web-app-node-modules:/app/apps/admin-web/node_modules
-    command: >
-      sh -c "pnpm install --no-frozen-lockfile ; pnpm dev"
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
-  admin-web-node-modules:
-  admin-web-app-node-modules:
+  postgres_data:

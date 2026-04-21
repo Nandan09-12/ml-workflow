@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
+    cors_allowed_origins: str = (
+        "http://localhost:8081,"
+        "http://127.0.0.1:8081,"
+        "http://localhost:19006,"
+        "http://127.0.0.1:19006"
+    )
 
     database_url: str = "postgresql+asyncpg://devuser:devpass@db:5432/devdb"
     database_ssl_mode: DatabaseSSLMode = "disable"
@@ -80,6 +86,14 @@ class Settings(BaseSettings):
             ssl_context.check_hostname = True
             ssl_context.verify_mode = ssl.CERT_REQUIRED
         return {"ssl": ssl_context}
+
+    @property
+    def resolved_cors_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

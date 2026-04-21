@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ml-workflow/shared-types": ["packages/shared-types/src"],
+      "@ml-workflow/api-client": ["packages/api-client/src"]
+    }
+  }
+}
