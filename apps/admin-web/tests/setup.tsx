@@ -4,12 +4,39 @@ import { afterEach, vi } from "vitest";
 
 declare global {
   var __mockPathname: string;
+  var __mockSearchParams: string;
+  var __mockSearchParamsInstance: URLSearchParams;
+  var __mockRouterReplace: ReturnType<typeof vi.fn>;
+  var __mockRouterPush: ReturnType<typeof vi.fn>;
 }
 
 globalThis.__mockPathname = "/dashboard";
+globalThis.__mockSearchParams = "";
+globalThis.__mockSearchParamsInstance = new URLSearchParams();
+globalThis.__mockRouterReplace = vi.fn();
+globalThis.__mockRouterPush = vi.fn();
+
+function getMockSearchParams() {
+  const nextSearchParams = globalThis.__mockSearchParams;
+
+  if (globalThis.__mockSearchParamsInstance.toString() !== nextSearchParams) {
+    globalThis.__mockSearchParamsInstance = new URLSearchParams(nextSearchParams);
+  }
+
+  return globalThis.__mockSearchParamsInstance;
+}
 
 vi.mock("next/navigation", () => ({
   usePathname: () => globalThis.__mockPathname,
+  useSearchParams: () => getMockSearchParams(),
+  useRouter: () => ({
+    push: globalThis.__mockRouterPush,
+    replace: globalThis.__mockRouterReplace,
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+  }),
   redirect: vi.fn(),
 }));
 
@@ -28,4 +55,8 @@ vi.mock("next/image", () => ({
 afterEach(() => {
   cleanup();
   globalThis.__mockPathname = "/dashboard";
+  globalThis.__mockSearchParams = "";
+  globalThis.__mockSearchParamsInstance = new URLSearchParams();
+  globalThis.__mockRouterReplace.mockReset();
+  globalThis.__mockRouterPush.mockReset();
 });
