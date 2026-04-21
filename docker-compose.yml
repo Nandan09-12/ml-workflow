@@ -13,3 +13,21 @@ services:
       - ./apps/api/.env
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+    working_dir: /app/apps/admin-web
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - admin-web-node-modules:/app/node_modules
+      - admin-web-app-node-modules:/app/apps/admin-web/node_modules
+    command: >
+      sh -c "pnpm install --no-frozen-lockfile ; pnpm dev"
+
+volumes:
+  admin-web-node-modules:
+  admin-web-app-node-modules:

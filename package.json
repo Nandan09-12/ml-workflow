@@ -1,0 +1,11 @@
+{
+  "name": "ml-workflow",
+  "private": true,
+  "packageManager": "pnpm@10.6.2",
+  "scripts": {
+    "dev:admin-web": "pnpm --filter admin-web dev",
+    "lint:admin-web": "pnpm --filter admin-web lint",
+    "typecheck:admin-web": "pnpm --filter admin-web typecheck",
+    "test:admin-web": "pnpm --filter admin-web test"
+  }
+}
