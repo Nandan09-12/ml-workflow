@@ -21,6 +21,13 @@ Follow this file alongside:
 - `docs/ADMIN_WEB_API_INTEGRATION.md`
 - `docs/ADMIN_WEB_COMPONENTS.md`
 
+## Current Checkpoint
+
+- Frontend Wave 1 and Wave 2 foundation work is complete.
+- The app scaffold, shell, required routes, mock-data pages, and shared review primitives are in place.
+- URL-backed filter and pagination state is implemented for Daily Submissions, Workorders, and Users.
+- The remaining backlog in this file starts at auth, real API reads, mutations, and exports.
+
 ## Phase 0 - Confirm Context
 - Read the admin mockup at `docs/ui-mockups/adminui/index.html`.
 - Read `docs/PRD.md`, `docs/BUSINESS_RULES.md`, and `docs/API_SPEC.md`.

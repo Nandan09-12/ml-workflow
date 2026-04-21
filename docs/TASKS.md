@@ -29,7 +29,10 @@ If this file conflicts with `docs/ADMIN_WEB_FRONTEND_TASKS.md`, use this file as
 At the time this file was written:
 
 - `apps/admin-web` is scaffolded as a Next.js App Router TypeScript app.
-- Shared layout, route shell, mock-data pages, and initial unit tests are in place.
+- Shared layout, route shell, mock-data pages, and reusable UI primitives are in place.
+- URL-driven filter and pagination state is implemented for Daily Submissions, Workorders, and Users.
+- Mock-data detail surfaces use shared definition-list and timeline primitives.
+- Unit coverage includes route smoke tests, layout behavior, detail-page rendering, and URL-state behavior for the current list pages.
 - Static admin UI mockups exist under `docs/ui-mockups/adminui`.
 - Admin web default port is `3000`.
 - API default base URL is `http://localhost:8000/api/v1`.
@@ -38,6 +41,13 @@ At the time this file was written:
 - `SUPABASE_URL` exists in the API env and can be mirrored as `NEXT_PUBLIC_SUPABASE_URL`.
 - The frontend also needs `NEXT_PUBLIC_SUPABASE_ANON_KEY`; do not use the API service role key in frontend code or env.
 - Repo-level GitHub Actions checks now include an `admin-web-checks` job for lint, typecheck, unit tests, and production build.
+
+## Implementation Checkpoint
+
+- Wave 1 and Wave 2 foundation work is complete for the frontend mock/review layer.
+- Completed scope includes scaffold, Docker/workspace integration, shared shell, all required routes, mock-data review pages, shared UI primitives, and URL-driven list-state foundations for Daily Submissions, Workorders, and Users.
+- Current verification baseline is `pnpm --filter admin-web test`, `pnpm --filter admin-web typecheck`, `pnpm --filter admin-web lint`, and `pnpm --filter admin-web build` all passing.
+- Remaining work begins at real auth, API integration, mutations, and export wiring. Treat that as the next wave of implementation, not unfinished scaffold work.
 
 ## Product Guardrails
 Agents must follow these rules:
