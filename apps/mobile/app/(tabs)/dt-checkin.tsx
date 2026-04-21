@@ -1,6 +1,7 @@
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ApiClientError } from "@ml-workflow/api-client";
 
 import { ScreenShell } from "../../src/components/ScreenShell";
 import { useSubmissions } from "../../src/submissions/SubmissionsContext";
@@ -29,14 +30,43 @@ function regionLabel(region: SubmissionRecord["region"]) {
 
 export default function DtCheckinScreen() {
   const { filter } = useLocalSearchParams<{ filter?: string }>();
-  const { submissions } = useSubmissions();
+  const { isLoading, loadSubmissions, submissions } = useSubmissions();
   const [selectedFilter, setSelectedFilter] = useState<(typeof filters)[number]>("Today");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (filter === "Ongoing" || filter === "Completed" || filter === "Attachments" || filter === "Today") {
       setSelectedFilter(filter);
     }
   }, [filter]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const run = async () => {
+        try {
+          setLoadError(null);
+          await loadSubmissions();
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+          setLoadError(
+            error instanceof ApiClientError
+              ? error.message
+              : "Unable to load submissions right now.",
+          );
+        }
+      };
+
+      void run();
+
+      return () => {
+        active = false;
+      };
+    }, [loadSubmissions]),
+  );
 
   const visibleSubmissions = useMemo(() => {
     if (selectedFilter === "Today") {
@@ -68,6 +98,8 @@ export default function DtCheckinScreen() {
           </Pressable>
         </View>
 
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
         <View style={styles.filterRow}>
           {filters.map((filterName) => (
             <Pressable
@@ -91,6 +123,16 @@ export default function DtCheckinScreen() {
         </View>
 
         <View style={styles.cardList}>
+          {!isLoading && visibleSubmissions.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No submissions found</Text>
+              <Text style={styles.emptySubtitle}>
+                {selectedFilter === "Today"
+                  ? "You do not have any submissions for today yet."
+                  : `No submissions match the ${selectedFilter.toLowerCase()} filter.`}
+              </Text>
+            </View>
+          ) : null}
           {visibleSubmissions.map((submission) => (
             <Pressable
               key={submission.id}
@@ -184,6 +226,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: spacing.xl,
   },
+  errorText: {
+    color: "#C43F5A",
+    fontSize: typography.caption,
+    marginTop: spacing.lg,
+  },
   filterChip: {
     backgroundColor: "#EAF1FB",
     borderRadius: radius.pill,
@@ -206,6 +253,25 @@ const styles = StyleSheet.create({
   cardList: {
     gap: spacing.lg,
     marginTop: spacing.lg,
+  },
+  emptyCard: {
+    backgroundColor: "#F8FBFF",
+    borderColor: "#D8E4F5",
+    borderRadius: 26,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  emptyTitle: {
+    color: "#182742",
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  emptySubtitle: {
+    color: "#7084A0",
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: spacing.sm,
   },
   submissionCard: {
     backgroundColor: colors.surface,

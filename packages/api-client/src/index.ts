@@ -113,7 +113,39 @@ export function createApiClient(options: CreateApiClientOptions) {
       return undefined as T;
     }
 
-    const payload = (await response.json()) as ApiEnvelope<T>;
+    const rawBody = await response.text();
+    let payload: ApiEnvelope<T> | null = null;
+
+    if (rawBody) {
+      try {
+        payload = JSON.parse(rawBody) as ApiEnvelope<T>;
+      } catch {
+        if (!response.ok) {
+          throw new ApiClientError(
+            rawBody.trim() || "Request failed",
+            "NON_JSON_ERROR_RESPONSE",
+            { rawBody },
+            response.status,
+          );
+        }
+
+        throw new ApiClientError(
+          "Backend returned an unexpected response format.",
+          "INVALID_RESPONSE_FORMAT",
+          { rawBody },
+          response.status,
+        );
+      }
+    }
+
+    if (!payload) {
+      throw new ApiClientError(
+        "Backend returned an empty response.",
+        "EMPTY_RESPONSE",
+        undefined,
+        response.status,
+      );
+    }
 
     if (!response.ok || payload.success === false) {
       const error = payload.success === false ? payload.error : undefined;

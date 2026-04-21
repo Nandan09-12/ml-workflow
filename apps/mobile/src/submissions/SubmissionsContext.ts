@@ -4,6 +4,8 @@ import type { SubmissionPayload, SubmissionRecord } from "./types";
 
 export type SubmissionsContextValue = {
   addSubmission: (payload: SubmissionPayload) => SubmissionRecord;
+  isLoading: boolean;
+  loadSubmissions: () => Promise<SubmissionRecord[]>;
   submissions: SubmissionRecord[];
   updateSubmission: (
     id: string,
