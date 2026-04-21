@@ -1,4 +1,4 @@
-export type ExpenseCategory = "gas" | "food" | "hotel" | "travel" | "other";
+export type ExpenseCategory = "gas" | "food" | "room" | "other";
 
 export type ExpensePayload = {
   amount: string;
@@ -11,7 +11,12 @@ export type ExpensePayload = {
   };
 };
 
-export type ExpenseRecord = ExpensePayload & {
+export type ExpenseRecord = {
+  amount: number;
+  category: ExpenseCategory;
   createdAt: string;
+  date: string;
   id: string;
+  ownerUserId: string;
+  receiptFileName: string;
 };

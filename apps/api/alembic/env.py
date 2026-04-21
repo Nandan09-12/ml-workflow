@@ -9,6 +9,8 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.models import (
     AppUser,
+    ExpenseEntry,
+    MileageEntry,
     Submission,
     SubmissionAttachment,
     SubmissionAuditLog,
@@ -17,7 +19,16 @@ from app.models import (
 )
 
 # Keep model imports explicit so autogenerate sees metadata for all tables.
-_ = (AppUser, Submission, SubmissionAttachment, SubmissionAuditLog, UserApprovalAudit, Workorder)
+_ = (
+    AppUser,
+    ExpenseEntry,
+    MileageEntry,
+    Submission,
+    SubmissionAttachment,
+    SubmissionAuditLog,
+    UserApprovalAudit,
+    Workorder,
+)
 
 config = context.config
 settings = get_settings()

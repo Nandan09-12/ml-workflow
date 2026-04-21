@@ -1,45 +1,115 @@
-import { PropsWithChildren, useMemo, useState } from "react";
+import { PropsWithChildren, useCallback, useMemo, useState } from "react";
 
+import { apiClient } from "../lib/api";
 import { SubmissionsContext } from "./SubmissionsContext";
 import type { SubmissionPayload, SubmissionRecord } from "./types";
 
-const initialSubmissions: SubmissionRecord[] = [
-  {
-    workorderName: "Cluster 4",
-    completedGrids: 18,
-    createdAt: "2026-04-15T10:00:00.000Z",
-    id: "1",
-    numberOfGrids: 24,
-    pendingGrids: 6,
-    region: "NE-UP",
-    skippedGrids: 0,
-    shift: "AM",
-    startTime: "08:15 AM",
-    status: "ATTACHMENTS",
-    teamNumber: "12",
-    ticketNumber: "8891",
-    workDate: "2026-04-15",
-  },
-  {
-    workorderName: "Cluster 2",
-    completedGrids: 11,
-    createdAt: "2026-04-14T10:00:00.000Z",
-    id: "2",
-    numberOfGrids: 20,
-    pendingGrids: 7,
-    region: "Central",
-    skippedGrids: 2,
-    shift: "PM",
-    startTime: "01:05 PM",
-    status: "ONGOING",
-    teamNumber: "18",
-    ticketNumber: "7712",
-    workDate: "2026-04-14",
-  },
-];
+type BackendSubmission = {
+  id: string;
+  work_date: string;
+  shift: "AM" | "PM";
+  team_number: string | null;
+  ticket_number: string | null;
+  skipped_grids: number;
+  force_tested_grids: number;
+  completed_grids: number;
+  status: "IN_PROGRESS" | "CHECKED_OUT" | "COMPLETED";
+  version_number: number;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+  file_submission_pending: boolean;
+  workorder_summary: {
+    workorder_code: string;
+    total_grids: number;
+    region: "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA";
+  } | null;
+};
+
+type ListSubmissionsResponse = {
+  items: BackendSubmission[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+};
+
+function toLocalRegion(region: "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA" | undefined): SubmissionRecord["region"] {
+  if (region === "NE_UP") {
+    return "NE-UP";
+  }
+  if (region === "CENTRAL") {
+    return "Central";
+  }
+  return "South";
+}
+
+function toDisplayTime(isoTimestamp: string | null | undefined) {
+  if (!isoTimestamp) {
+    return undefined;
+  }
+
+  const parsed = new Date(isoTimestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function toLocalStatus(item: BackendSubmission): SubmissionRecord["status"] {
+  if (item.status === "COMPLETED") {
+    return "COMPLETED";
+  }
+  if (item.file_submission_pending) {
+    return "ATTACHMENTS";
+  }
+  return "ONGOING";
+}
+
+function toSubmissionRecord(item: BackendSubmission): SubmissionRecord {
+  const totalGrids = item.workorder_summary?.total_grids ?? item.completed_grids + item.skipped_grids;
+  return {
+    backendVersionNumber: item.version_number,
+    completedGrids: item.completed_grids,
+    createdAt: item.created_at,
+    endTime: toDisplayTime(item.ended_at),
+    forceTestedGrids: item.force_tested_grids,
+    id: item.id,
+    numberOfGrids: totalGrids,
+    pendingGrids: Math.max(totalGrids - item.completed_grids - item.skipped_grids, 0),
+    region: toLocalRegion(item.workorder_summary?.region),
+    shift: item.shift,
+    skippedGrids: item.skipped_grids,
+    startTime: toDisplayTime(item.started_at) ?? "",
+    status: toLocalStatus(item),
+    teamNumber: item.team_number ?? "",
+    ticketNumber: item.ticket_number ?? "",
+    workDate: item.work_date,
+    workorderName: item.workorder_summary?.workorder_code ?? "Workorder",
+  };
+}
 
 export function SubmissionsProvider({ children }: PropsWithChildren) {
-  const [submissions, setSubmissions] = useState<SubmissionRecord[]>(initialSubmissions);
+  const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadSubmissions = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await apiClient.get<ListSubmissionsResponse>("/api/v1/submissions");
+      const mapped = response.items.map(toSubmissionRecord);
+      setSubmissions(mapped);
+      return mapped;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -54,6 +124,8 @@ export function SubmissionsProvider({ children }: PropsWithChildren) {
         setSubmissions((current) => [record, ...current]);
         return record;
       },
+      isLoading,
+      loadSubmissions,
       submissions,
       updateSubmission: (
         id: string,
@@ -79,7 +151,7 @@ export function SubmissionsProvider({ children }: PropsWithChildren) {
         );
       },
     }),
-    [submissions],
+    [isLoading, loadSubmissions, submissions],
   );
 
   return <SubmissionsContext.Provider value={value}>{children}</SubmissionsContext.Provider>;

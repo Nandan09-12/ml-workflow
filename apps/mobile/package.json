@@ -13,6 +13,7 @@
     "test": "echo \"Add React Native Testing Library tests next\""
   },
   "dependencies": {
+    "@babel/runtime": "^7.29.0",
     "@hookform/resolvers": "^3.9.0",
     "@ml-workflow/api-client": "workspace:*",
     "@ml-workflow/shared-types": "workspace:*",

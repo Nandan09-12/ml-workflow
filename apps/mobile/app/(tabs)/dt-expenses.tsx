@@ -1,6 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { ApiClientError } from "@ml-workflow/api-client";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { ScreenShell } from "../../src/components/ScreenShell";
@@ -8,12 +9,12 @@ import { useExpenses } from "../../src/expenses/ExpensesContext";
 import type { ExpenseCategory, ExpensePayload } from "../../src/expenses/types";
 import { colors, radius, spacing, typography } from "../../src/theme/tokens";
 
-const categoryOptions: ExpenseCategory[] = ["gas", "food", "hotel", "travel", "other"];
+const categoryOptions: ExpenseCategory[] = ["gas", "food", "room", "other"];
 
 type FieldErrors = Partial<Record<"amount" | "date" | "receipt", string>>;
 
 export default function DtExpensesScreen() {
-  const { expenses, saveExpense } = useExpenses();
+  const { expenses, loadExpenses, saveExpense } = useExpenses();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [date, setDate] = useState(today);
   const [amount, setAmount] = useState("");
@@ -21,6 +22,11 @@ export default function DtExpensesScreen() {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [receipt, setReceipt] = useState<ExpensePayload["receipt"] | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadExpenses();
+  }, [loadExpenses]);
 
   const pickReceipt = async () => {
     const result = await DocumentPicker.getDocumentAsync({
@@ -41,8 +47,9 @@ export default function DtExpensesScreen() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nextErrors: FieldErrors = {};
+    setFormError(null);
 
     if (!date.trim()) {
       nextErrors.date = "Date is required";
@@ -60,12 +67,23 @@ export default function DtExpensesScreen() {
       return;
     }
 
-    saveExpense({
-      amount,
-      category,
-      date,
-      receipt,
-    });
+    try {
+      await saveExpense({
+        amount,
+        category,
+        date,
+        receipt,
+      });
+      setAmount("");
+      setCategory("gas");
+      setCategoryOpen(false);
+      setReceipt(null);
+      setErrors({});
+    } catch (error: unknown) {
+      setFormError(
+        error instanceof ApiClientError ? error.message : "Unable to save expense right now.",
+      );
+    }
   };
 
   return (
@@ -150,14 +168,8 @@ export default function DtExpensesScreen() {
           <Text style={styles.saveButtonLabel}>Save expense</Text>
         </Pressable>
 
-        {expenses.length > 0 ? (
-          <View style={styles.payloadCard}>
-            <Text style={styles.payloadTitle}>Latest payload</Text>
-            <Text style={styles.payloadText}>
-              {JSON.stringify(expenses[0], null, 2)}
-            </Text>
-          </View>
-        ) : null}
+        {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
       </ScrollView>
     </ScreenShell>
   );
@@ -313,23 +325,9 @@ const styles = StyleSheet.create({
     fontSize: typography.title,
     fontWeight: "800",
   },
-  payloadCard: {
-    backgroundColor: "#F4F8FE",
-    borderColor: "#D8E4F5",
-    borderRadius: 24,
-    borderWidth: 1.5,
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-  },
-  payloadTitle: {
-    color: "#182742",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: spacing.md,
-  },
-  payloadText: {
-    color: "#51657F",
-    fontSize: 13,
-    lineHeight: 18,
+  formError: {
+    color: "#C43F5A",
+    fontSize: typography.caption,
+    marginTop: spacing.sm,
   },
 });

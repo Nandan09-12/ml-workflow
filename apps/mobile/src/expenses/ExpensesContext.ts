@@ -4,7 +4,9 @@ import type { ExpensePayload, ExpenseRecord } from "./types";
 
 export type ExpensesContextValue = {
   expenses: ExpenseRecord[];
-  saveExpense: (payload: ExpensePayload) => ExpenseRecord;
+  isLoading: boolean;
+  loadExpenses: () => Promise<ExpenseRecord[]>;
+  saveExpense: (payload: ExpensePayload) => Promise<ExpenseRecord>;
 };
 
 export const ExpensesContext = createContext<ExpensesContextValue | null>(null);

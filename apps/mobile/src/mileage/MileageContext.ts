@@ -1,10 +1,13 @@
 import { createContext, useContext } from "react";
 
-import type { MileagePayload, MileageRecord } from "./types";
+import type { EndMileagePayload, MileageEntry, StartMileagePayload } from "./types";
 
 export type MileageContextValue = {
-  mileages: MileageRecord[];
-  saveMileage: (payload: MileagePayload) => MileageRecord;
+  currentMileage: MileageEntry | null;
+  isLoading: boolean;
+  endShift: (payload: EndMileagePayload) => Promise<MileageEntry>;
+  loadMileageForDate: (workDate: string) => Promise<MileageEntry | null>;
+  startShift: (payload: StartMileagePayload) => Promise<MileageEntry>;
 };
 
 export const MileageContext = createContext<MileageContextValue | null>(null);
