@@ -87,10 +87,10 @@ pnpm --filter @ml-workflow/mobile typecheck
 
 GitHub Actions currently runs repository checks defined in `.github/workflows/checks.yml`.
 
-- `api-checks`
-- `admin-web-checks`
+- `api-checks` runs when API-related files change.
+- `admin-web-checks` runs when admin-web or related workspace files change.
 
-This means a push or PR can still run multiple jobs even if you changed only one area. CI is workflow-based, not folder-based.
+CI is still defined at the repository level, but the jobs are scoped to relevant file changes so unrelated app work does not fail on another app's checks.
 
 ## Guidance For Coding Agents
 
