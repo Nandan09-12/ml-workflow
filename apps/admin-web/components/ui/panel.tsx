@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
+import type * as React from "react";
 import { clsx } from "clsx";
 
-interface PanelProps {
-  children: ReactNode;
+interface PanelProps extends React.PropsWithChildren {
   className?: string;
 }
 

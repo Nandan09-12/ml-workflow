@@ -1,12 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type * as React from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 
-interface AdminShellProps {
-  children: ReactNode;
-}
+type AdminShellProps = React.PropsWithChildren;
 
 export function AdminShell({ children }: AdminShellProps) {
   return (

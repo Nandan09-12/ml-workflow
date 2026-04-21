@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
+import type * as React from "react";
 import { clsx } from "clsx";
 
-interface AlertProps {
+interface AlertProps extends React.PropsWithChildren {
   title: string;
-  children: ReactNode;
   tone?: "info" | "warning" | "danger";
 }
 

@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import type * as React from "react";
 
 interface PageHeaderProps {
   kicker: string;
   title: string;
   subtitle?: string;
-  actions?: ReactNode;
+  actions?: React.ReactNode;
 }
 
 export function PageHeader({ kicker, title, subtitle, actions }: PageHeaderProps) {

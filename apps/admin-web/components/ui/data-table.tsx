@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
+import type * as React from "react";
 
-interface DataTableProps {
+interface DataTableProps extends React.PropsWithChildren {
   headers: string[];
-  children: ReactNode;
 }
 
 export function DataTable({ headers, children }: DataTableProps) {
