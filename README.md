@@ -23,6 +23,7 @@ V1 includes the **DT Check-in** module for drive testers and admins.
 - `docs/CODEX_HANDOFF.md`
 - `docs/BACKEND_MIGRATION_POLICY.md`
 - `docs/TESTING.md`
+- `CONTRIBUTING.md`
 
 ## V1 Summary
 

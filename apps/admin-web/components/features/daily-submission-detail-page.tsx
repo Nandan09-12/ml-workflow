@@ -1,9 +1,11 @@
 import { Alert } from "@/components/ui/alert";
 import { DataTable } from "@/components/ui/data-table";
+import { DefinitionList } from "@/components/ui/definition-list";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Timeline } from "@/components/ui/timeline";
 import { attachmentHistory, auditTimeline, submissions, workorders } from "@/lib/mock/data";
 import { formatRegion } from "@/lib/format/labels";
 
@@ -53,13 +55,15 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
             <StatusBadge value={workorder.status} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <dl className="grid gap-3 text-sm text-neutral">
-              <div className="flex justify-between gap-4 border-b border-line pb-3"><dt>Region</dt><dd className="font-semibold text-ink">{formatRegion(workorder.region)}</dd></div>
-              <div className="flex justify-between gap-4 border-b border-line pb-3"><dt>Total Grids</dt><dd className="font-semibold text-ink">{workorder.totalGrids}</dd></div>
-              <div className="flex justify-between gap-4 border-b border-line pb-3"><dt>Aggregate Completed</dt><dd className="font-semibold text-ink">{workorder.completedGrids}</dd></div>
-              <div className="flex justify-between gap-4 border-b border-line pb-3"><dt>Aggregate Skipped</dt><dd className="font-semibold text-ink">{workorder.skippedGrids}</dd></div>
-              <div className="flex justify-between gap-4"><dt>Remaining Grids</dt><dd className="font-semibold text-ink">{workorder.remainingGrids}</dd></div>
-            </dl>
+            <DefinitionList
+              items={[
+                { term: "Region", description: formatRegion(workorder.region) },
+                { term: "Total Grids", description: workorder.totalGrids },
+                { term: "Aggregate Completed", description: workorder.completedGrids },
+                { term: "Aggregate Skipped", description: workorder.skippedGrids },
+                { term: "Remaining Grids", description: workorder.remainingGrids },
+              ]}
+            />
             <ProgressBar value={workorder.progressPercent} caption={`${workorder.progressPercent}% complete across all child daily submissions`} />
           </div>
         </Panel>
@@ -81,25 +85,11 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
         </Panel>
         <Panel>
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Attachment History</p>
-          <ol className="mt-4 grid gap-4">
-            {attachmentHistory.map((event) => (
-              <li key={event.id} className="border-l-2 border-line pl-4">
-                <strong className="block text-sm font-semibold text-ink">{event.title}</strong>
-                <span className="mt-1 block text-sm text-neutral">{event.detail}</span>
-              </li>
-            ))}
-          </ol>
+          <Timeline items={attachmentHistory} />
         </Panel>
         <Panel>
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Audit Timeline</p>
-          <ol className="mt-4 grid gap-4">
-            {auditTimeline.map((event) => (
-              <li key={event.id} className="border-l-2 border-line pl-4">
-                <strong className="block text-sm font-semibold text-ink">{event.title}</strong>
-                <span className="mt-1 block text-sm text-neutral">{event.detail}</span>
-              </li>
-            ))}
-          </ol>
+          <Timeline items={auditTimeline} />
         </Panel>
         <Panel>
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Admin Actions</p>

@@ -19,7 +19,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect API changes
+        id: api_changes
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^(apps/api/|\.github/workflows/checks\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Python
+        if: steps.api_changes.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -29,23 +48,31 @@ jobs:
             apps/api/requirements-dev.txt
 
       - name: Guard immutable Alembic revisions
+        if: steps.api_changes.outputs.run == 'true'
         env:
           MIGRATION_GUARD_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           MIGRATION_GUARD_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: python scripts/check_alembic_immutable.py
 
       - name: Install dependencies
+        if: steps.api_changes.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
       - name: Ruff
+        if: steps.api_changes.outputs.run == 'true'
         run: ruff check app tests
 
       - name: Unit and API tests
+        if: steps.api_changes.outputs.run == 'true'
         env:
           PYTHONPATH: .
         run: pytest tests -m "not integration"
+
+      - name: Skip API checks
+        if: steps.api_changes.outputs.run != 'true'
+        run: echo "No API-related changes detected; skipping api-checks."
 
   admin-web-checks:
     runs-on: ubuntu-latest
@@ -55,12 +82,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect admin-web changes
+        id: admin_web_changes
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^(apps/admin-web/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|\.github/workflows/checks\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up pnpm
+        if: steps.admin_web_changes.outputs.run == 'true'
         uses: pnpm/action-setup@v4
         with:
-          version: 10.6.2
+          version: 9.15.0
 
       - name: Set up Node.js
+        if: steps.admin_web_changes.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -68,16 +115,25 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
+        if: steps.admin_web_changes.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Lint admin web
+        if: steps.admin_web_changes.outputs.run == 'true'
         run: pnpm --filter admin-web lint
 
       - name: Typecheck admin web
+        if: steps.admin_web_changes.outputs.run == 'true'
         run: pnpm --filter admin-web typecheck
 
       - name: Unit test admin web
+        if: steps.admin_web_changes.outputs.run == 'true'
         run: pnpm --filter admin-web test
 
       - name: Build admin web
+        if: steps.admin_web_changes.outputs.run == 'true'
         run: pnpm --filter admin-web build
+
+      - name: Skip admin-web checks
+        if: steps.admin_web_changes.outputs.run != 'true'
+        run: echo "No admin-web-related changes detected; skipping admin-web-checks."

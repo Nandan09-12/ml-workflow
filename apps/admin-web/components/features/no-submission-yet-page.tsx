@@ -1,5 +1,8 @@
+"use client";
+
 import { Alert } from "@/components/ui/alert";
 import { DataTable } from "@/components/ui/data-table";
+import { FilterDateInput } from "@/components/ui/filter-date-input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -14,7 +17,7 @@ export function NoSubmissionYetPage() {
       </Alert>
       <Panel>
         <div className="mb-5 max-w-56">
-          <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral"><span>Date</span><input type="date" defaultValue="2026-04-20" className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink" /></label>
+          <FilterDateInput label="Date" value="2026-04-20" onChange={() => undefined} />
         </div>
         <DataTable headers={["Tester", "Email", "Approved Role", "Last Submission", "Last Workorder"]}>
           {noSubmissionYet.map((user) => (

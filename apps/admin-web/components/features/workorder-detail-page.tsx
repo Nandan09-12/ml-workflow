@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { DataTable } from "@/components/ui/data-table";
+import { DefinitionList } from "@/components/ui/definition-list";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -62,10 +63,14 @@ export function WorkorderDetailPage({ workorderId }: WorkorderDetailPageProps) {
         <div className="space-y-6">
           <Panel>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Guardrails</p>
-            <div className="mt-4 space-y-3 text-sm text-neutral">
-              <p>Total grids cannot be reduced below aggregate completed plus skipped.</p>
-              <p>Workorder code must remain unique after normalization.</p>
-              <p>Region belongs to the parent workorder and affects date validation by timezone.</p>
+            <div className="mt-4">
+              <DefinitionList
+                items={[
+                  { term: "Minimum Total", description: "Cannot drop below aggregate completed plus skipped" },
+                  { term: "Code Rule", description: "Workorder code must remain unique after normalization" },
+                  { term: "Region Guard", description: "Region stays on the parent workorder and influences date validation" },
+                ]}
+              />
             </div>
           </Panel>
           <Alert title="Edit scope" tone="info">

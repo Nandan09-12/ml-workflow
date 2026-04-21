@@ -1,3 +1,7 @@
+"use client";
+
+import { FilterDateInput } from "@/components/ui/filter-date-input";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 
@@ -8,10 +12,30 @@ export function ReportsPage() {
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral"><span>Date From</span><input type="date" defaultValue="2026-04-14" className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink" /></label>
-            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral"><span>Date To</span><input type="date" defaultValue="2026-04-20" className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink" /></label>
-            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral"><span>Region</span><select className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink"><option>All</option><option>NE-UP</option><option>Central</option><option>South/Florida</option></select></label>
-            <label className="grid gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral"><span>Submission Status</span><select className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink"><option>All</option><option>IN_PROGRESS</option><option>CHECKED_OUT</option><option>COMPLETED</option></select></label>
+            <FilterDateInput label="Date From" value="2026-04-14" onChange={() => undefined} />
+            <FilterDateInput label="Date To" value="2026-04-20" onChange={() => undefined} />
+            <FilterSelect
+              label="Region"
+              value="ALL"
+              onChange={() => undefined}
+              options={[
+                { value: "ALL", label: "All" },
+                { value: "NE_UP", label: "NE-UP" },
+                { value: "CENTRAL", label: "Central" },
+                { value: "SOUTH_FLORIDA", label: "South/Florida" },
+              ]}
+            />
+            <FilterSelect
+              label="Submission Status"
+              value="ALL"
+              onChange={() => undefined}
+              options={[
+                { value: "ALL", label: "All" },
+                { value: "IN_PROGRESS", label: "IN_PROGRESS" },
+                { value: "CHECKED_OUT", label: "CHECKED_OUT" },
+                { value: "COMPLETED", label: "COMPLETED" },
+              ]}
+            />
           </div>
         </Panel>
         <Panel>
