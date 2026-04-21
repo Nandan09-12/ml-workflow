@@ -1,7 +1,17 @@
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings

@@ -7,7 +7,10 @@ from typing import Any, Protocol
 from app.core.config import Settings
 from app.core.enums import AccountStatus
 from app.core.errors import AppError, ErrorCode
-from app.integrations.storage.base import StorageIntegrationError, StorageProviderProtocol
+from app.integrations.storage.base import (
+    StorageIntegrationError,
+    StorageProviderProtocol,
+)
 from app.models.app_user import AppUser
 from app.models.mileage_entry import MileageEntry
 
