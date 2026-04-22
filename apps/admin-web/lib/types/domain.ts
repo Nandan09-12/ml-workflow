@@ -96,3 +96,88 @@ export interface NoSubmissionYetRecord {
   lastSubmissionDate: string | null;
   lastWorkorderCode: string | null;
 }
+
+// ─── API response item shapes (snake_case — exactly as returned by backend) ────
+
+export interface ApiWorkorderItem {
+  id: string;
+  workorder_code: string;
+  region: Region;
+  status: WorkorderStatus;
+  total_grids: number;
+  completed_grids: number;
+  skipped_grids: number;
+  remaining_grids: number;
+  progress_percent: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiSubmissionWorkorderSummary {
+  workorder_code: string;
+  region: Region;
+  status: WorkorderStatus;
+  total_grids: number;
+  completed_grids: number;
+  skipped_grids: number;
+}
+
+export interface ApiSubmissionItem {
+  id: string;
+  client_generated_id: string;
+  workorder_id: string;
+  owner_user_id: string;
+  submitter_name_snapshot: string;
+  submitter_email_snapshot: string;
+  work_date: string;
+  shift: Shift;
+  team_number: string | null;
+  ticket_number: string | null;
+  skipped_grids: number;
+  force_tested_grids: number;
+  completed_grids: number;
+  status: SubmissionStatus;
+  version_number: number;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+  file_submission_pending: boolean;
+  workorder_summary: ApiSubmissionWorkorderSummary | null;
+}
+
+export interface ApiUserItem {
+  id: string;
+  auth_user_id: string;
+  full_name: string;
+  email: string;
+  requested_role: UserRole;
+  approved_role: UserRole | null;
+  account_status: AccountStatus;
+  approved_at: string | null;
+  approved_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiNoSubmissionYetItem {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
+export interface ApiPagination {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+// ─── Hook pagination (camelCase — used inside hooks and page components) ────────
+
+export interface HookPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}

@@ -1,17 +1,46 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UsersPage } from "@/components/features/users-page";
+import { users } from "@/lib/mock/data";
+
+const mockUseAdminUsers = vi.fn();
+vi.mock("@/lib/hooks/use-admin-users", () => ({
+  useAdminUsers: (...args: unknown[]) => mockUseAdminUsers(...args),
+}));
+
+const defaultHookResult = {
+  items: users,
+  pagination: { page: 1, pageSize: 20, total: users.length, totalPages: 1 },
+  isLoading: false,
+  isError: false,
+  error: null,
+  isFallback: false,
+};
 
 describe("UsersPage", () => {
-  it("filters the table from URL search params on first render", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAdminUsers.mockReturnValue(defaultHookResult);
+  });
+
+  it("passes filter params to the hook from URL search params", () => {
     globalThis.__mockPathname = "/users";
     globalThis.__mockSearchParams = "role=ADMIN&account_status=APPROVED";
 
     render(<UsersPage />);
 
-    expect(screen.getByText("Asha Kumar")).toBeInTheDocument();
-    expect(screen.queryByText("Jane Doe")).not.toBeInTheDocument();
-    expect(screen.getByText(/1 matching users/i)).toBeInTheDocument();
+    expect(mockUseAdminUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ requested_role: "ADMIN", account_status: "APPROVED" }),
+    );
+  });
+
+  it("renders hook items in the table", () => {
+    globalThis.__mockPathname = "/users";
+    globalThis.__mockSearchParams = "";
+
+    render(<UsersPage />);
+
+    expect(screen.getByText(users[0].fullName)).toBeInTheDocument();
   });
 
   it("updates the URL when a search filter changes", () => {

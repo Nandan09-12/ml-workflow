@@ -14,17 +14,16 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TableToolbar } from "@/components/ui/table-toolbar";
-import { workorders } from "@/lib/mock/data";
+import { Alert } from "@/components/ui/alert";
 import { formatRegion } from "@/lib/format/labels";
 import {
   buildWorkordersSearchParams,
   defaultWorkordersFilters,
-  filterWorkorders,
   hasActiveWorkordersFilters,
-  paginateWorkorders,
   parseWorkordersFilters,
   type WorkordersFilterState,
 } from "@/lib/filters/workorders";
+import { useAdminWorkorders } from "@/lib/hooks/use-admin-workorders";
 
 export function WorkordersPage() {
   const pathname = usePathname();
@@ -38,8 +37,15 @@ export function WorkordersPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const filteredWorkorders = useMemo(() => filterWorkorders(workorders, filters), [filters]);
-  const paginatedWorkorders = useMemo(() => paginateWorkorders(filteredWorkorders, filters), [filteredWorkorders, filters]);
+  const { items, pagination, isLoading, isError, error, isFallback } = useAdminWorkorders({
+    workorder_code: filters.workorderCode || undefined,
+    region: filters.region !== "ALL" ? filters.region : undefined,
+    status: filters.status !== "ALL" ? filters.status : undefined,
+    date_from: filters.dateFrom || undefined,
+    date_to: filters.dateTo || undefined,
+    page: filters.page,
+    page_size: filters.pageSize,
+  });
 
   function syncFilters(nextFilters: WorkordersFilterState) {
     setFilters(nextFilters);
@@ -67,6 +73,16 @@ export function WorkordersPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker="Parent Records" title="Workorders" subtitle="Aggregate progress view across all child daily submissions, with guardrails for admin edits and reconciliation." />
+      {isFallback && (
+        <Alert title="Using cached data" tone="info">
+          Live workorders data is temporarily unavailable. Showing cached data.
+        </Alert>
+      )}
+      {isError && !isFallback && (
+        <Alert title="Error loading workorders" tone="danger">
+          {error instanceof Error ? error.message : "Failed to load workorders"}
+        </Alert>
+      )}
       <Panel>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <SearchInput label="Workorder Code" value={filters.workorderCode} onChange={(value) => updateFilter("workorderCode", value)} placeholder="WO-" />
@@ -97,7 +113,7 @@ export function WorkordersPage() {
       </Panel>
       <Panel>
         <TableToolbar
-          summary={`${paginatedWorkorders.totalItems} matching workorders with filters and pagination persisted in the URL.`}
+          summary={`${pagination.total} matching workorders with filters and pagination persisted in the URL.`}
           actions={
             hasActiveWorkordersFilters(filters) ? (
               <button
@@ -110,7 +126,11 @@ export function WorkordersPage() {
             ) : null
           }
         />
-        {paginatedWorkorders.totalItems === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12" role="status">
+            <div className="animate-spin rounded-full border-4 border-line border-t-brand h-8 w-8" />
+          </div>
+        ) : items.length === 0 ? (
           <EmptyState
             title="No workorders found"
             description="Adjust the filters to widen the results. Workorder list state stays in the URL so drill-down links can preserve context."
@@ -118,7 +138,7 @@ export function WorkordersPage() {
         ) : (
           <>
             <DataTable headers={["Code", "Region", "Total", "Completed", "Skipped", "Remaining", "Progress", "Status", ""]}>
-              {paginatedWorkorders.items.map((workorder) => (
+              {items.map((workorder) => (
                 <tr key={workorder.id}>
                   <td className="font-semibold text-ink">{workorder.workorderCode}</td>
                   <td>{formatRegion(workorder.region)}</td>
@@ -133,10 +153,10 @@ export function WorkordersPage() {
               ))}
             </DataTable>
             <Pagination
-              page={paginatedWorkorders.page}
-              pageSize={paginatedWorkorders.pageSize}
-              totalItems={paginatedWorkorders.totalItems}
-              totalPages={paginatedWorkorders.totalPages}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.total}
+              totalPages={pagination.totalPages}
               onPageChange={updatePage}
               onPageSizeChange={updatePageSize}
             />

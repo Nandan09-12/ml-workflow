@@ -9,8 +9,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { dashboardMetrics, submissions, workorders } from "@/lib/mock/data";
+import { dashboardMetrics } from "@/lib/mock/data";
 import { formatFileState, formatRegion } from "@/lib/format/labels";
+import { useAdminSubmissions } from "@/lib/hooks/use-admin-submissions";
+import { useAdminWorkorders } from "@/lib/hooks/use-admin-workorders";
 import { useDashboardSummary } from "@/lib/hooks/use-dashboard-summary";
 
 export function DashboardPage() {
@@ -23,6 +25,9 @@ export function DashboardPage() {
     date_from: dateFrom,
     date_to: dateTo,
   });
+
+  const { items: recentWorkorders } = useAdminWorkorders({ page_size: 4 });
+  const { items: recentSubmissions } = useAdminSubmissions({ page_size: 5 });
 
   if (isLoading) {
     return (
@@ -123,7 +128,7 @@ export function DashboardPage() {
             <Link className="text-sm font-bold text-brand" href="/workorders">View all</Link>
           </div>
           <div className="grid gap-3">
-            {workorders.map((workorder) => (
+            {recentWorkorders.map((workorder) => (
               <article key={workorder.id} className="rounded-panel border border-line bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -172,7 +177,7 @@ export function DashboardPage() {
           <Link className="text-sm font-bold text-brand" href="/daily-submissions">Open table</Link>
         </div>
         <DataTable headers={["Work Date", "Tester", "Workorder", "Shift", "Status", "File"]}>
-          {submissions.slice(0, 5).map((submission) => (
+          {recentSubmissions.map((submission) => (
             <tr key={submission.id}>
               <td>{submission.workDate}</td>
               <td>
