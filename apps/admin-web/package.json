@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

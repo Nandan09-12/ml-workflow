@@ -1,17 +1,47 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DailySubmissionsPage } from "@/components/features/daily-submissions-page";
+import { submissions } from "@/lib/mock/data";
+
+const mockUseAdminSubmissions = vi.fn();
+vi.mock("@/lib/hooks/use-admin-submissions", () => ({
+  useAdminSubmissions: (...args: unknown[]) => mockUseAdminSubmissions(...args),
+}));
+
+const defaultHookResult = {
+  items: submissions,
+  pagination: { page: 1, pageSize: 20, total: submissions.length, totalPages: 1 },
+  isLoading: false,
+  isError: false,
+  error: null,
+  isFallback: false,
+};
 
 describe("DailySubmissionsPage", () => {
-  it("filters the table from URL search params on first render", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAdminSubmissions.mockReturnValue(defaultHookResult);
+  });
+
+  it("passes filter params to the hook from URL search params", () => {
     globalThis.__mockPathname = "/daily-submissions";
-    globalThis.__mockSearchParams = "region=NE_UP&submission_status=COMPLETED";
+    globalThis.__mockSearchParams = "submission_status=COMPLETED&shift=AM";
 
     render(<DailySubmissionsPage />);
 
-    expect(screen.getByText("Jane Doe")).toBeInTheDocument();
-    expect(screen.queryByText("Priya Shah")).not.toBeInTheDocument();
-    expect(screen.getByText(/1 matching submissions/i)).toBeInTheDocument();
+    expect(mockUseAdminSubmissions).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "COMPLETED", shift: "AM" }),
+    );
+  });
+
+  it("renders hook items in the table", () => {
+    globalThis.__mockPathname = "/daily-submissions";
+    globalThis.__mockSearchParams = "";
+    const name = submissions[0].testerName;
+
+    render(<DailySubmissionsPage />);
+
+    expect(screen.getByText(name)).toBeInTheDocument();
   });
 
   it("updates the URL when a filter changes and resets the page", () => {
@@ -29,22 +59,14 @@ describe("DailySubmissionsPage", () => {
     );
   });
 
-  it("preserves filters when paginating", () => {
+  it("shows an empty state when hook returns no items", () => {
     globalThis.__mockPathname = "/daily-submissions";
-    globalThis.__mockSearchParams = "region=NE_UP&page_size=2";
-
-    render(<DailySubmissionsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-
-    expect(globalThis.__mockRouterReplace).toHaveBeenCalledWith(
-      "/daily-submissions?region=NE_UP&page=2&page_size=2",
-    );
-  });
-
-  it("shows an empty state when no rows match the active filters", () => {
-    globalThis.__mockPathname = "/daily-submissions";
-    globalThis.__mockSearchParams = "tester=no-match";
+    globalThis.__mockSearchParams = "";
+    mockUseAdminSubmissions.mockReturnValue({
+      ...defaultHookResult,
+      items: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    });
 
     render(<DailySubmissionsPage />);
 

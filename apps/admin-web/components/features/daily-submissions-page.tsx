@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Alert } from "@/components/ui/alert";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterDateInput } from "@/components/ui/filter-date-input";
@@ -13,17 +14,15 @@ import { Panel } from "@/components/ui/panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TableToolbar } from "@/components/ui/table-toolbar";
-import { submissions } from "@/lib/mock/data";
 import {
   buildDailySubmissionsSearchParams,
   defaultDailySubmissionsFilters,
-  filterDailySubmissions,
   hasActiveDailySubmissionsFilters,
-  paginateDailySubmissions,
   parseDailySubmissionsFilters,
   type DailySubmissionsFilterState,
 } from "@/lib/filters/daily-submissions";
 import { formatRegion } from "@/lib/format/labels";
+import { useAdminSubmissions } from "@/lib/hooks/use-admin-submissions";
 
 export function DailySubmissionsPage() {
   const pathname = usePathname();
@@ -40,14 +39,17 @@ export function DailySubmissionsPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const filteredSubmissions = useMemo(
-    () => filterDailySubmissions(submissions, filters),
-    [filters],
-  );
-  const paginatedSubmissions = useMemo(
-    () => paginateDailySubmissions(filteredSubmissions, filters),
-    [filteredSubmissions, filters],
-  );
+  const { items, pagination, isLoading, isError, error, isFallback } = useAdminSubmissions({
+    work_date: filters.workDate || undefined,
+    status: filters.submissionStatus !== "ALL" ? filters.submissionStatus : undefined,
+    shift: filters.shift !== "ALL" ? filters.shift : undefined,
+    file_submission_pending:
+      filters.fileSubmissionPending !== "ALL"
+        ? filters.fileSubmissionPending === "true"
+        : undefined,
+    page: filters.page,
+    page_size: filters.pageSize,
+  });
 
   function syncFilters(nextFilters: DailySubmissionsFilterState) {
     setFilters(nextFilters);
@@ -89,6 +91,16 @@ export function DailySubmissionsPage() {
           <button type="button" className="rounded-panel border border-line bg-panel px-4 py-2 text-sm font-semibold text-slate-700">Export CSV</button>
         }
       />
+      {isFallback && (
+        <Alert title="Using cached data" tone="info">
+          Live submissions data is temporarily unavailable. Showing cached data.
+        </Alert>
+      )}
+      {isError && !isFallback && (
+        <Alert title="Error loading submissions" tone="danger">
+          {error instanceof Error ? error.message : "Failed to load submissions"}
+        </Alert>
+      )}
       <Panel>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <FilterDateInput label="Date" value={filters.workDate} onChange={(value) => updateFilter("workDate", value)} />
@@ -150,7 +162,7 @@ export function DailySubmissionsPage() {
       </Panel>
       <Panel>
         <TableToolbar
-          summary={`${paginatedSubmissions.totalItems} matching submissions with filters persisted in the URL for shareable review links.`}
+          summary={`${pagination.total} matching submissions with filters persisted in the URL for shareable review links.`}
           actions={
             hasActiveDailySubmissionsFilters(filters) ? (
               <button
@@ -163,7 +175,11 @@ export function DailySubmissionsPage() {
             ) : null
           }
         />
-        {paginatedSubmissions.totalItems === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12" role="status">
+            <div className="animate-spin rounded-full border-4 border-line border-t-brand h-8 w-8" />
+          </div>
+        ) : items.length === 0 ? (
           <EmptyState
             title="No daily submissions found"
             description="Adjust the filters to widen the results. Empty filters are omitted from the URL so shared links stay clean."
@@ -171,7 +187,7 @@ export function DailySubmissionsPage() {
         ) : (
           <>
             <DataTable headers={["Work Date", "Tester", "Workorder", "Region", "Shift", "Completed", "Skipped", "Submission", "Workorder", "File", ""]}>
-              {paginatedSubmissions.items.map((submission) => (
+              {items.map((submission) => (
                 <tr key={submission.id}>
                   <td>{submission.workDate}</td>
                   <td>
@@ -191,10 +207,10 @@ export function DailySubmissionsPage() {
               ))}
             </DataTable>
             <Pagination
-              page={paginatedSubmissions.page}
-              pageSize={paginatedSubmissions.pageSize}
-              totalItems={paginatedSubmissions.totalItems}
-              totalPages={paginatedSubmissions.totalPages}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.total}
+              totalPages={pagination.totalPages}
               onPageChange={updatePage}
               onPageSizeChange={updatePageSize}
             />

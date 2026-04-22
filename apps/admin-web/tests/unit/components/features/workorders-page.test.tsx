@@ -1,17 +1,46 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkordersPage } from "@/components/features/workorders-page";
+import { workorders } from "@/lib/mock/data";
+
+const mockUseAdminWorkorders = vi.fn();
+vi.mock("@/lib/hooks/use-admin-workorders", () => ({
+  useAdminWorkorders: (...args: unknown[]) => mockUseAdminWorkorders(...args),
+}));
+
+const defaultHookResult = {
+  items: workorders,
+  pagination: { page: 1, pageSize: 20, total: workorders.length, totalPages: 1 },
+  isLoading: false,
+  isError: false,
+  error: null,
+  isFallback: false,
+};
 
 describe("WorkordersPage", () => {
-  it("filters the table from URL search params on first render", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAdminWorkorders.mockReturnValue(defaultHookResult);
+  });
+
+  it("passes filter params to the hook from URL search params", () => {
     globalThis.__mockPathname = "/workorders";
     globalThis.__mockSearchParams = "region=NE_UP&status=ACTIVE";
 
     render(<WorkordersPage />);
 
-    expect(screen.getByText("WO-NE-401")).toBeInTheDocument();
-    expect(screen.queryByText("WO-CT-072")).not.toBeInTheDocument();
-    expect(screen.getByText(/2 matching workorders/i)).toBeInTheDocument();
+    expect(mockUseAdminWorkorders).toHaveBeenCalledWith(
+      expect.objectContaining({ region: "NE_UP", status: "ACTIVE" }),
+    );
+  });
+
+  it("renders hook items in the table", () => {
+    globalThis.__mockPathname = "/workorders";
+    globalThis.__mockSearchParams = "";
+
+    render(<WorkordersPage />);
+
+    expect(screen.getByText(workorders[0].workorderCode)).toBeInTheDocument();
   });
 
   it("updates the URL when filters change", () => {

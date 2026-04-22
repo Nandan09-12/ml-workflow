@@ -11,16 +11,15 @@ import { Panel } from "@/components/ui/panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TableToolbar } from "@/components/ui/table-toolbar";
-import { users } from "@/lib/mock/data";
+import { Alert } from "@/components/ui/alert";
 import {
   buildUsersSearchParams,
   defaultUsersFilters,
-  filterUsers,
   hasActiveUsersFilters,
-  paginateUsers,
   parseUsersFilters,
   type UsersFilterState,
 } from "@/lib/filters/users";
+import { useAdminUsers } from "@/lib/hooks/use-admin-users";
 
 export function UsersPage() {
   const pathname = usePathname();
@@ -34,8 +33,12 @@ export function UsersPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const filteredUsers = useMemo(() => filterUsers(users, filters), [filters]);
-  const paginatedUsers = useMemo(() => paginateUsers(filteredUsers, filters), [filteredUsers, filters]);
+  const { items, pagination, isLoading, isError, error, isFallback } = useAdminUsers({
+    requested_role: filters.role !== "ALL" ? filters.role : undefined,
+    account_status: filters.accountStatus !== "ALL" ? filters.accountStatus : undefined,
+    page: filters.page,
+    page_size: filters.pageSize,
+  });
 
   function syncFilters(nextFilters: UsersFilterState) {
     setFilters(nextFilters);
@@ -63,6 +66,16 @@ export function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker="Access Management" title="Users" subtitle="All app users with role and account-status filters. Admin-only access decisions remain explicit and auditable." />
+      {isFallback && (
+        <Alert title="Using cached data" tone="info">
+          Live users data is temporarily unavailable. Showing cached data.
+        </Alert>
+      )}
+      {isError && !isFallback && (
+        <Alert title="Error loading users" tone="danger">
+          {error instanceof Error ? error.message : "Failed to load users"}
+        </Alert>
+      )}
       <Panel>
         <div className="grid gap-3 md:grid-cols-3">
           <FilterSelect
@@ -92,7 +105,7 @@ export function UsersPage() {
       </Panel>
       <Panel>
         <TableToolbar
-          summary={`${paginatedUsers.totalItems} matching users with filter state preserved in the URL for review links.`}
+          summary={`${pagination.total} matching users with filter state preserved in the URL for review links.`}
           actions={
             hasActiveUsersFilters(filters) ? (
               <button
@@ -105,7 +118,11 @@ export function UsersPage() {
             ) : null
           }
         />
-        {paginatedUsers.totalItems === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12" role="status">
+            <div className="animate-spin rounded-full border-4 border-line border-t-brand h-8 w-8" />
+          </div>
+        ) : items.length === 0 ? (
           <EmptyState
             title="No users found"
             description="Adjust the filters to widen the results. User list state is preserved in the URL so the same review view can be shared." 
@@ -113,7 +130,7 @@ export function UsersPage() {
         ) : (
           <>
             <DataTable headers={["Full Name", "Email", "Requested Role", "Approved Role", "Status", "Created", "Last Login"]}>
-              {paginatedUsers.items.map((user) => (
+              {items.map((user) => (
                 <tr key={user.id}>
                   <td className="font-semibold text-ink">{user.fullName}</td>
                   <td>{user.email}</td>
@@ -126,10 +143,10 @@ export function UsersPage() {
               ))}
             </DataTable>
             <Pagination
-              page={paginatedUsers.page}
-              pageSize={paginatedUsers.pageSize}
-              totalItems={paginatedUsers.totalItems}
-              totalPages={paginatedUsers.totalPages}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.total}
+              totalPages={pagination.totalPages}
               onPageChange={updatePage}
               onPageSizeChange={updatePageSize}
             />

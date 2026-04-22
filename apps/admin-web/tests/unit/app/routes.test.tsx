@@ -31,6 +31,26 @@ vi.mock("@/lib/hooks/use-dashboard-summary", () => ({
   })),
 }));
 
+vi.mock("@/lib/hooks/use-admin-submissions", () => ({
+  useAdminSubmissions: vi.fn(() => ({ items: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, isLoading: false, isError: false, error: null, isFallback: false })),
+}));
+
+vi.mock("@/lib/hooks/use-admin-workorders", () => ({
+  useAdminWorkorders: vi.fn(() => ({ items: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, isLoading: false, isError: false, error: null, isFallback: false })),
+}));
+
+vi.mock("@/lib/hooks/use-admin-users", () => ({
+  useAdminUsers: vi.fn(() => ({ items: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, isLoading: false, isError: false, error: null, isFallback: false })),
+}));
+
+vi.mock("@/lib/hooks/use-pending-users", () => ({
+  usePendingUsers: vi.fn(() => ({ items: [], count: 0, isLoading: false, isError: false, error: null, isFallback: false })),
+}));
+
+vi.mock("@/lib/hooks/use-no-submission-yet", () => ({
+  useNoSubmissionYet: vi.fn(() => ({ items: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, isLoading: false, isError: false, error: null, isFallback: false })),
+}));
+
 describe("route smoke tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
