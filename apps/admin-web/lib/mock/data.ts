@@ -98,6 +98,7 @@ export const submissions: SubmissionRecord[] = [
     endedAt: "05:41 PM",
     updatedAt: "05:41 PM",
     fileSubmissionPending: true,
+    versionNumber: 1,
   },
   {
     id: "sub-2",
@@ -118,6 +119,7 @@ export const submissions: SubmissionRecord[] = [
     endedAt: "04:55 PM",
     updatedAt: "04:55 PM",
     fileSubmissionPending: false,
+    versionNumber: 1,
   },
   {
     id: "sub-3",
@@ -138,6 +140,7 @@ export const submissions: SubmissionRecord[] = [
     endedAt: null,
     updatedAt: "03:20 PM",
     fileSubmissionPending: false,
+    versionNumber: 1,
   },
   {
     id: "sub-4",
@@ -158,6 +161,7 @@ export const submissions: SubmissionRecord[] = [
     endedAt: "02:52 PM",
     updatedAt: "02:52 PM",
     fileSubmissionPending: false,
+    versionNumber: 1,
   },
   {
     id: "sub-5",
@@ -178,6 +182,7 @@ export const submissions: SubmissionRecord[] = [
     endedAt: "01:18 PM",
     updatedAt: "01:18 PM",
     fileSubmissionPending: true,
+    versionNumber: 1,
   },
 ];
 

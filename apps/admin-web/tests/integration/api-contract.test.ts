@@ -523,3 +523,319 @@ describe("Auth contract — unauthenticated requests return 401", () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Wave 5 — GET /admin/submissions/{id}
+// Fields read by useAdminSubmission → mapItem()
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasCredentials)("GET /admin/submissions/{id} — contract", () => {
+  let submissionId: string;
+  let item: Record<string, unknown>;
+
+  beforeAll(async () => {
+    // Fetch the first available submission to get a real ID
+    const list = await apiFetch<Record<string, unknown>>("/admin/submissions?page_size=1");
+    const items = list.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+    submissionId = items[0].id as string;
+    item = await apiFetch(`/admin/submissions/${submissionId}`);
+  });
+
+  it("returns the submission as a flat object (not paginated)", () => {
+    if (!submissionId) return;
+    expect(typeof item).toBe("object");
+    expect(item).not.toHaveProperty("items");
+    expect(item).not.toHaveProperty("pagination");
+  });
+
+  it("has all fields useAdminSubmission reads including version_number", () => {
+    if (!submissionId) return;
+    assertKeys("submission detail", item, [
+      "id",
+      "work_date",
+      "submitter_name_snapshot",
+      "submitter_email_snapshot",
+      "shift",
+      "ticket_number",
+      "completed_grids",
+      "skipped_grids",
+      "force_tested_grids",
+      "status",
+      "file_submission_pending",
+      "started_at",
+      "ended_at",
+      "updated_at",
+      "version_number",
+    ]);
+  });
+
+  it("version_number is a positive integer (required for optimistic concurrency)", () => {
+    if (!submissionId) return;
+    expect(typeof item.version_number).toBe("number");
+    expect(item.version_number as number).toBeGreaterThanOrEqual(1);
+  });
+
+  it("workorder_summary field exists (may be null, but must be present)", () => {
+    if (!submissionId) return;
+    expect(Object.prototype.hasOwnProperty.call(item, "workorder_summary")).toBe(true);
+    // If present and non-null, assert sub-fields
+    if (item.workorder_summary !== null && item.workorder_summary !== undefined) {
+      const ws = item.workorder_summary as Record<string, unknown>;
+      assertKeys("workorder_summary", ws, [
+        "workorder_code",
+        "region",
+        "status",
+        "total_grids",
+        "completed_grids",
+        "skipped_grids",
+        "remaining_grids",
+        "progress_percent",
+      ]);
+    }
+  });
+
+  it("404 for a non-existent submission ID", async () => {
+    const res = await fetch(`${BASE_URL}/admin/submissions/non-existent-id-000`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 5 — GET /admin/submissions/{id}/audit
+// Fields read by useSubmissionAudit
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasCredentials)("GET /admin/submissions/{id}/audit — contract", () => {
+  let submissionId: string;
+  let data: Record<string, unknown>;
+
+  beforeAll(async () => {
+    const list = await apiFetch<Record<string, unknown>>("/admin/submissions?page_size=1");
+    const items = list.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+    submissionId = items[0].id as string;
+    data = await apiFetch(`/admin/submissions/${submissionId}/audit`);
+  });
+
+  it("returns {items, count} shape", () => {
+    if (!submissionId) return;
+    expect(data).toHaveProperty("items");
+    expect(data).toHaveProperty("count");
+    expect(Array.isArray(data.items)).toBe(true);
+    expect(typeof data.count).toBe("number");
+  });
+
+  it("count matches items.length", () => {
+    if (!submissionId) return;
+    const items = data.items as unknown[];
+    expect(data.count).toBe(items.length);
+  });
+
+  it("each audit item has required fields", () => {
+    if (!submissionId) return;
+    const items = data.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+
+    for (const item of items) {
+      assertKeys("audit item", item, [
+        "id",
+        "submission_id",
+        "changed_by_user_id",
+        "changed_at",
+        "change_type",
+        "before_snapshot",
+        "after_snapshot",
+      ]);
+      expect(typeof item.change_type).toBe("string");
+      expect(typeof item.changed_at).toBe("string");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 5 — GET /admin/submissions/{id}/attachments/history
+// Fields read by useSubmissionAttachmentHistory
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasCredentials)("GET /admin/submissions/{id}/attachments/history — contract", () => {
+  let submissionId: string;
+  let data: Record<string, unknown>;
+
+  beforeAll(async () => {
+    const list = await apiFetch<Record<string, unknown>>("/admin/submissions?page_size=1");
+    const items = list.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+    submissionId = items[0].id as string;
+    data = await apiFetch(`/admin/submissions/${submissionId}/attachments/history`);
+  });
+
+  it("returns {items, count} shape", () => {
+    if (!submissionId) return;
+    expect(data).toHaveProperty("items");
+    expect(data).toHaveProperty("count");
+    expect(Array.isArray(data.items)).toBe(true);
+    expect(typeof data.count).toBe("number");
+  });
+
+  it("each attachment item has required fields", () => {
+    if (!submissionId) return;
+    const items = data.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+
+    for (const item of items) {
+      assertKeys("attachment history item", item, [
+        "id",
+        "submission_id",
+        "file_name",
+        "bucket_name",
+        "object_path",
+        "mime_type",
+        "file_extension",
+        "file_size_bytes",
+        "uploaded_by_user_id",
+        "uploaded_at",
+        "is_active",
+      ]);
+      expect(typeof item.file_name).toBe("string");
+      expect(typeof item.is_active).toBe("boolean");
+      expect(typeof item.file_size_bytes).toBe("number");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 5 — GET /admin/workorders/{id}
+// Fields read by useAdminWorkorder
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasCredentials)("GET /admin/workorders/{id} — contract", () => {
+  let workorderId: string;
+  let item: Record<string, unknown>;
+
+  beforeAll(async () => {
+    const list = await apiFetch<Record<string, unknown>>("/admin/workorders?page_size=1");
+    const items = list.items as Record<string, unknown>[];
+    if (items.length === 0) return;
+    workorderId = items[0].id as string;
+    item = await apiFetch(`/admin/workorders/${workorderId}`);
+  });
+
+  it("returns a flat workorder object with submissions array", () => {
+    if (!workorderId) return;
+    expect(typeof item).toBe("object");
+    expect(item).toHaveProperty("submissions");
+    expect(Array.isArray(item.submissions)).toBe(true);
+  });
+
+  it("has all workorder-level fields useAdminWorkorder maps", () => {
+    if (!workorderId) return;
+    assertKeys("workorder detail", item, [
+      "id",
+      "workorder_code",
+      "region",
+      "status",
+      "total_grids",
+      "completed_grids",
+      "skipped_grids",
+      "remaining_grids",
+      "progress_percent",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(typeof item.remaining_grids).toBe("number");
+    expect(typeof item.progress_percent).toBe("number");
+  });
+
+  it("each submission in submissions array has version_number", () => {
+    if (!workorderId) return;
+    const subs = item.submissions as Record<string, unknown>[];
+    if (subs.length === 0) return;
+
+    for (const sub of subs) {
+      assertKeys("child submission", sub, [
+        "id",
+        "work_date",
+        "submitter_name_snapshot",
+        "shift",
+        "ticket_number",
+        "completed_grids",
+        "skipped_grids",
+        "force_tested_grids",
+        "status",
+        "version_number",
+        "started_at",
+        "ended_at",
+        "file_submission_pending",
+      ]);
+      expect(
+        typeof sub.version_number,
+        "child submission.version_number must be a number",
+      ).toBe("number");
+    }
+  });
+
+  it("404 for a non-existent workorder ID", async () => {
+    const res = await fetch(`${BASE_URL}/admin/workorders/non-existent-id-000`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 5 — GET /admin/reports/submissions/export
+// Returns CSV blob (skipEnvelope: true)
+// ---------------------------------------------------------------------------
+describe.skipIf(!hasCredentials)("GET /admin/reports/submissions/export — contract", () => {
+  it("returns text/csv content-type (not JSON envelope)", async () => {
+    const res = await fetch(`${BASE_URL}/admin/reports/submissions/export`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(res.ok, `export endpoint returned HTTP ${res.status}`).toBe(true);
+    const contentType = res.headers.get("content-type") ?? "";
+    expect(
+      contentType.includes("csv") || contentType.includes("text/"),
+      `Expected CSV content-type, got: ${contentType}`,
+    ).toBe(true);
+  });
+
+  it("accepts filter params without error", async () => {
+    const res = await fetch(
+      `${BASE_URL}/admin/reports/submissions/export?status=COMPLETED`,
+      { headers: { Authorization: `Bearer ${TOKEN}` } },
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("returns 401 without auth header", async () => {
+    const res = await fetch(`${BASE_URL}/admin/reports/submissions/export`);
+    expect(res.status).toBe(401);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave 5 — Auth on mutation endpoints (401 without token)
+// ---------------------------------------------------------------------------
+describe("Auth contract — Wave 5 mutation endpoints return 401 without token", () => {
+  const mutationEndpoints = [
+    { method: "POST", path: "/admin/users/some-user-id/approve" },
+    { method: "POST", path: "/admin/users/some-user-id/reject" },
+    { method: "POST", path: "/admin/users/some-user-id/suspend" },
+    { method: "POST", path: "/admin/submissions/some-sub-id/reopen" },
+    { method: "PATCH", path: "/admin/submissions/some-sub-id" },
+    { method: "PATCH", path: "/admin/workorders/some-wo-id" },
+  ];
+
+  for (const { method, path } of mutationEndpoints) {
+    it(`${method} ${path} returns 401 without auth header`, async () => {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      expect(
+        res.status,
+        `${method} ${path} should return 401 without auth, got ${res.status}`,
+      ).toBe(401);
+    });
+  }
+});

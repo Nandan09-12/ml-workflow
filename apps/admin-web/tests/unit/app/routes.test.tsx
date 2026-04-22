@@ -51,6 +51,58 @@ vi.mock("@/lib/hooks/use-no-submission-yet", () => ({
   useNoSubmissionYet: vi.fn(() => ({ items: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, isLoading: false, isError: false, error: null, isFallback: false })),
 }));
 
+vi.mock("@/lib/hooks/use-admin-submission", () => ({
+  useAdminSubmission: vi.fn((id: string) => {
+    const sub1 = { id: "sub-1", testerName: "Priya Shah", workorderCode: "WO-SF-118", region: "SOUTH_FLORIDA", shift: "PM", ticketNumber: "TKT-9031", completedGrids: 27, skippedGrids: 2, forceTestedGrids: 4, status: "CHECKED_OUT", workorderStatus: "ACTIVE", fileState: "FILE_PENDING", startedAt: "2026-04-20T08:12:00Z", endedAt: "2026-04-20T17:41:00Z", updatedAt: "2026-04-20T17:41:00Z", fileSubmissionPending: true, workDate: "2026-04-20", testerEmail: "priya@mltech.com" };
+    const sub2 = { id: "sub-2", testerName: "Jane Doe", workorderCode: "WO-NE-401", region: "NE_UP", shift: "AM", ticketNumber: "TKT-8712", completedGrids: 38, skippedGrids: 1, forceTestedGrids: 3, status: "COMPLETED", workorderStatus: "ACTIVE", fileState: "ATTACHED", startedAt: "2026-04-20T07:48:00Z", endedAt: "2026-04-20T16:55:00Z", updatedAt: "2026-04-20T16:55:00Z", fileSubmissionPending: false, workDate: "2026-04-20", testerEmail: "jane@mltech.com" };
+    const found = id === "sub-1" ? sub1 : id === "sub-2" ? sub2 : sub1;
+    return { submission: found, isLoading: false, isError: false, error: null, isFallback: false };
+  }),
+}));
+
+vi.mock("@/lib/hooks/use-submission-audit", () => ({
+  useSubmissionAudit: vi.fn(() => ({ items: [], count: 0, isLoading: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-submission-attachment-history", () => ({
+  useSubmissionAttachmentHistory: vi.fn(() => ({ items: [], count: 0, isLoading: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-edit-submission", () => ({
+  useEditSubmission: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-reopen-submission", () => ({
+  useReopenSubmission: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-admin-workorder", () => ({
+  useAdminWorkorder: vi.fn(() => ({
+    workorder: { id: "wo-1", workorderCode: "WO-NE-401", region: "NE_UP", totalGrids: 145, completedGrids: 91, skippedGrids: 8, remainingGrids: 46, progressPercent: 68, status: "ACTIVE", createdAt: "2026-04-16 08:20 AM", updatedAt: "2026-04-20 05:41 PM", submissions: [] },
+    isLoading: false, isError: false, error: null, isFallback: false,
+  })),
+}));
+
+vi.mock("@/lib/hooks/use-edit-workorder", () => ({
+  useEditWorkorder: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-suspend-user", () => ({
+  useSuspendUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-approve-user", () => ({
+  useApproveUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-reject-user", () => ({
+  useRejectUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
+vi.mock("@/lib/hooks/use-submissions-export", () => ({
+  useSubmissionsExport: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
 describe("route smoke tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
