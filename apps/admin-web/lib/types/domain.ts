@@ -53,6 +53,7 @@ export interface SubmissionRecord {
   endedAt: string | null;
   updatedAt: string;
   fileSubmissionPending: boolean;
+  versionNumber: number;
 }
 
 export interface AttachmentEvent {
@@ -120,6 +121,8 @@ export interface ApiSubmissionWorkorderSummary {
   total_grids: number;
   completed_grids: number;
   skipped_grids: number;
+  remaining_grids: number;
+  progress_percent: number;
 }
 
 export interface ApiSubmissionItem {
@@ -171,6 +174,39 @@ export interface ApiPagination {
   page_size: number;
   total: number;
   total_pages: number;
+}
+
+// ─── Wave 5: audit, attachment history, workorder detail ────────────────────────
+
+export interface ApiAuditItem {
+  id: string;
+  submission_id: string;
+  action_type: string;
+  actor_user_id: string;
+  actor_role: string;
+  source: string;
+  changed_fields_json: { fields: string[] } | null;
+  before_snapshot_json: Record<string, unknown> | null;
+  after_snapshot_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ApiAttachmentHistoryItem {
+  id: string;
+  submission_id: string;
+  file_name: string;
+  bucket_name: string;
+  object_path: string;
+  mime_type: string;
+  file_extension: string;
+  file_size_bytes: number;
+  uploaded_by_user_id: string;
+  uploaded_at: string;
+  is_active: boolean;
+}
+
+export interface ApiWorkorderDetailResponse extends ApiWorkorderItem {
+  submissions: ApiSubmissionItem[];
 }
 
 // ─── Hook pagination (camelCase — used inside hooks and page components) ────────

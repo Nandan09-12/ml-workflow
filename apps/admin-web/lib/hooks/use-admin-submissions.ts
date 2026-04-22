@@ -59,6 +59,7 @@ function mapItem(item: ApiSubmissionItem): SubmissionRecord {
     endedAt: item.ended_at,
     updatedAt: item.updated_at,
     fileSubmissionPending: item.file_submission_pending,
+    versionNumber: item.version_number,
   };
 }
 

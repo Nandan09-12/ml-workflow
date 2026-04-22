@@ -8,6 +8,10 @@ vi.mock("@/lib/hooks/use-admin-users", () => ({
   useAdminUsers: (...args: unknown[]) => mockUseAdminUsers(...args),
 }));
 
+vi.mock("@/lib/hooks/use-suspend-user", () => ({
+  useSuspendUser: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
 const defaultHookResult = {
   items: users,
   pagination: { page: 1, pageSize: 20, total: users.length, totalPages: 1 },

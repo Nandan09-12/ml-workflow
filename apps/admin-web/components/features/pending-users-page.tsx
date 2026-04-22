@@ -1,13 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { usePendingUsers } from "@/lib/hooks/use-pending-users";
+import { useApproveUser } from "@/lib/hooks/use-approve-user";
+import { useRejectUser } from "@/lib/hooks/use-reject-user";
+
+type PendingAction = { userId: string; action: "approve" | "reject"; name: string } | null;
 
 export function PendingUsersPage() {
   const { items, isLoading, isError, error, isFallback } = usePendingUsers();
+  const approveMutation = useApproveUser();
+  const rejectMutation = useRejectUser();
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+
+  const isConfirming = approveMutation.isPending || rejectMutation.isPending;
+
+  function handleConfirm() {
+    if (!pendingAction) return;
+    const mutation = pendingAction.action === "approve" ? approveMutation : rejectMutation;
+    mutation.mutate(pendingAction.userId, { onSuccess: () => setPendingAction(null) });
+  }
 
   return (
     <div className="space-y-6">
@@ -20,6 +37,14 @@ export function PendingUsersPage() {
       {isError && !isFallback && (
         <Alert title="Error loading pending users" tone="danger">
           {error instanceof Error ? error.message : "Failed to load pending users"}
+        </Alert>
+      )}
+      {(approveMutation.isError || rejectMutation.isError) && (
+        <Alert title="Action failed" tone="danger">
+          {((approveMutation.error ?? rejectMutation.error) instanceof Error
+            ? (approveMutation.error ?? rejectMutation.error) as Error
+            : null
+          )?.message ?? "Unknown error"}
         </Alert>
       )}
       {isLoading ? (
@@ -39,13 +64,40 @@ export function PendingUsersPage() {
               </div>
               <p className="mt-2 text-xs font-bold uppercase tracking-[0.12em] text-neutral">Requested {user.createdAt}</p>
               <div className="mt-5 flex flex-wrap gap-3">
-                <button type="button" className="rounded-panel bg-brand px-4 py-2 text-sm font-semibold text-white">Approve</button>
-                <button type="button" className="rounded-panel bg-danger-soft px-4 py-2 text-sm font-semibold text-danger">Reject</button>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction({ userId: user.id, action: "approve", name: user.fullName })}
+                  className="rounded-panel bg-brand px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction({ userId: user.id, action: "reject", name: user.fullName })}
+                  className="rounded-panel bg-danger-soft px-4 py-2 text-sm font-semibold text-danger"
+                >
+                  Reject
+                </button>
               </div>
             </Panel>
           ))}
         </div>
       )}
+
+      <ConfirmationDialog
+        isOpen={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={handleConfirm}
+        title={pendingAction?.action === "approve" ? "Approve User" : "Reject User"}
+        description={
+          pendingAction?.action === "approve"
+            ? `Approve ${pendingAction.name}? They will gain access based on their requested role.`
+            : `Reject ${pendingAction?.name ?? "this user"}? They will not be granted access.`
+        }
+        confirmLabel={pendingAction?.action === "approve" ? "Approve" : "Reject"}
+        tone={pendingAction?.action === "approve" ? "warning" : "danger"}
+        isLoading={isConfirming}
+      />
     </div>
   );
 }

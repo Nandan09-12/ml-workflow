@@ -8,4 +8,6 @@ export const queryKeys = {
   users: (filters?: Record<string, string>) => ["users", filters ?? {}] as const,
   pendingUsers: ["pending-users"] as const,
   noSubmissionYet: (date: string) => ["no-submission-yet", date] as const,
+  submissionAudit: (id: string) => ["submission-audit", id] as const,
+  submissionAttachmentHistory: (id: string) => ["submission-attachments", id] as const,
 };

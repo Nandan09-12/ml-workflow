@@ -12,6 +12,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TableToolbar } from "@/components/ui/table-toolbar";
 import { Alert } from "@/components/ui/alert";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import {
   buildUsersSearchParams,
   defaultUsersFilters,
@@ -20,6 +21,7 @@ import {
   type UsersFilterState,
 } from "@/lib/filters/users";
 import { useAdminUsers } from "@/lib/hooks/use-admin-users";
+import { useSuspendUser } from "@/lib/hooks/use-suspend-user";
 
 export function UsersPage() {
   const pathname = usePathname();
@@ -28,6 +30,10 @@ export function UsersPage() {
   const searchParamsKey = searchParams.toString();
   const parsedFilters = useMemo(() => parseUsersFilters(searchParamsKey), [searchParamsKey]);
   const [filters, setFilters] = useState(parsedFilters);
+  const [suspendUserId, setSuspendUserId] = useState<string | null>(null);
+  const [suspendUserName, setSuspendUserName] = useState("");
+
+  const suspendMutation = useSuspendUser();
 
   useEffect(() => {
     setFilters(parsedFilters);
@@ -129,7 +135,7 @@ export function UsersPage() {
           />
         ) : (
           <>
-            <DataTable headers={["Full Name", "Email", "Requested Role", "Approved Role", "Status", "Created", "Last Login"]}>
+            <DataTable headers={["Full Name", "Email", "Requested Role", "Approved Role", "Status", "Created", "Last Login", ""]}>
               {items.map((user) => (
                 <tr key={user.id}>
                   <td className="font-semibold text-ink">{user.fullName}</td>
@@ -139,6 +145,17 @@ export function UsersPage() {
                   <td><StatusBadge value={user.accountStatus} /></td>
                   <td>{user.createdAt}</td>
                   <td>{user.lastLogin ?? "Never"}</td>
+                  <td>
+                    {user.accountStatus === "APPROVED" && (
+                      <button
+                        type="button"
+                        onClick={() => { setSuspendUserId(user.id); setSuspendUserName(user.fullName); }}
+                        className="rounded-md border border-line px-3 py-1 text-xs font-semibold text-danger hover:bg-danger-soft"
+                      >
+                        Suspend
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </DataTable>
@@ -153,6 +170,20 @@ export function UsersPage() {
           </>
         )}
       </Panel>
+
+      <ConfirmationDialog
+        isOpen={suspendUserId !== null}
+        onClose={() => setSuspendUserId(null)}
+        onConfirm={() => {
+          if (!suspendUserId) return;
+          suspendMutation.mutate(suspendUserId, { onSuccess: () => setSuspendUserId(null) });
+        }}
+        title="Suspend User"
+        description={`Suspend ${suspendUserName}? They will lose access immediately.`}
+        confirmLabel="Suspend"
+        tone="danger"
+        isLoading={suspendMutation.isPending}
+      />
     </div>
   );
 }
