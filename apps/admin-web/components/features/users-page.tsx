@@ -138,13 +138,13 @@ export function UsersPage() {
             <DataTable headers={["Full Name", "Email", "Requested Role", "Approved Role", "Status", "Created", "Last Login", ""]}>
               {items.map((user) => (
                 <tr key={user.id}>
-                  <td className="font-semibold text-ink">{user.fullName}</td>
-                  <td>{user.email}</td>
+                  <td className="max-w-48 truncate font-semibold text-ink" title={user.fullName}>{user.fullName}</td>
+                  <td className="max-w-56 truncate" title={user.email}>{user.email}</td>
                   <td><StatusBadge value={user.requestedRole} /></td>
                   <td>{user.approvedRole ? <StatusBadge value={user.approvedRole} /> : <span className="text-sm text-neutral">Pending</span>}</td>
                   <td><StatusBadge value={user.accountStatus} /></td>
-                  <td>{user.createdAt}</td>
-                  <td>{user.lastLogin ?? "Never"}</td>
+                  <td className="whitespace-nowrap">{user.createdAt}</td>
+                  <td className="whitespace-nowrap">{user.lastLogin ?? "Never"}</td>
                   <td>
                     {user.accountStatus === "APPROVED" && (
                       <button

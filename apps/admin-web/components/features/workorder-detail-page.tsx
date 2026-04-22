@@ -104,15 +104,15 @@ export function WorkorderDetailPage({ workorderId }: WorkorderDetailPageProps) {
             <DataTable headers={["Work Date", "Tester", "Shift", "Ticket", "Completed", "Skipped", "Submission", "File", ""]}>
               {childSubmissions.map((submission) => (
                 <tr key={submission.id}>
-                  <td>{submission.workDate}</td>
-                  <td>{submission.testerName}</td>
-                  <td>{submission.shift}</td>
-                  <td>{submission.ticketNumber}</td>
+                  <td className="whitespace-nowrap">{submission.workDate}</td>
+                  <td className="max-w-48 truncate" title={submission.testerName}>{submission.testerName}</td>
+                  <td className="whitespace-nowrap">{submission.shift}</td>
+                  <td className="max-w-40 truncate" title={submission.ticketNumber}>{submission.ticketNumber}</td>
                   <td className="text-right">{submission.completedGrids}</td>
                   <td className="text-right">{submission.skippedGrids}</td>
                   <td><StatusBadge value={submission.status} /></td>
                   <td><StatusBadge value={submission.fileState} /></td>
-                  <td><Link href={`/daily-submissions/${submission.id}`} className="text-sm font-bold text-brand">Open</Link></td>
+                  <td className="whitespace-nowrap"><Link href={`/daily-submissions/${submission.id}`} className="text-sm font-bold text-brand">Open</Link></td>
                 </tr>
               ))}
             </DataTable>
