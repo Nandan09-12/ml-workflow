@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { DataTable } from "@/components/ui/data-table";
@@ -8,10 +11,75 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { dashboardMetrics, submissions, workorders } from "@/lib/mock/data";
 import { formatFileState, formatRegion } from "@/lib/format/labels";
+import { useDashboardSummary } from "@/lib/hooks/use-dashboard-summary";
 
 export function DashboardPage() {
+  const [workDate, setWorkDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [dateFrom, setDateFrom] = useState<string | undefined>();
+  const [dateTo, setDateTo] = useState<string | undefined>();
+
+  const { data: dashboardData, isLoading, isError, error, isFallback } = useDashboardSummary({
+    work_date: workDate,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12" role="status">
+        <div className="animate-spin rounded-full border-4 border-line border-t-brand h-8 w-8"></div>
+      </div>
+    );
+  }
+
+  if (isError && !isFallback) {
+    return (
+      <Alert title="Error loading dashboard" tone="danger">
+        {error instanceof Error ? error.message : "Failed to load dashboard data"}
+      </Alert>
+    );
+  }
+
+  // Build metrics from live data or mock fallback
+  const liveMetrics = dashboardData
+    ? [
+        {
+          label: "Active Workorders",
+          value: dashboardData.active_workorders.toString(),
+          detail: `${dashboardData.completed_workorders} completed`,
+          tone: "brand" as const,
+          href: "/workorders?status=ACTIVE",
+        },
+        {
+          label: "Completed Submissions",
+          value: dashboardData.completed_submissions.toString(),
+          detail: (() => { const total = dashboardData.completed_submissions + dashboardData.ongoing_submissions + dashboardData.no_submission_yet; return total > 0 ? `${Math.round((dashboardData.completed_submissions / total) * 100)}% of daily records` : "0% of daily records"; })(),
+          tone: "success" as const,
+          href: "/daily-submissions?submission_status=COMPLETED",
+        },
+        {
+          label: "Ongoing Submissions",
+          value: dashboardData.ongoing_submissions.toString(),
+          detail: "In progress",
+          tone: "warning" as const,
+          href: "/daily-submissions?submission_status=CHECKED_OUT",
+        },
+        {
+          label: "No Submission Yet",
+          value: dashboardData.no_submission_yet.toString(),
+          detail: "Approved testers only",
+          tone: "danger" as const,
+          href: "/no-submission-yet",
+        },
+      ]
+    : dashboardMetrics;
   return (
     <div className="space-y-6">
+      {isFallback && (
+        <Alert title="Using cached data" tone="info">
+          Dashboard data is cached. Live updates may not be available at this time.
+        </Alert>
+      )}
       <PageHeader
         kicker="Today"
         title="Operations Summary"
@@ -20,7 +88,13 @@ export function DashboardPage() {
           <div className="flex flex-wrap gap-3">
             <label className="grid min-w-40 gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral">
               <span>Date</span>
-              <input type="date" defaultValue="2026-04-20" className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink" />
+              <input 
+                type="date" 
+                value={workDate} 
+                onChange={(e) => setWorkDate(e.target.value)}
+                data-testid="work-date-filter"
+                className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink" 
+              />
             </label>
             <label className="grid min-w-40 gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral">
               <span>Region</span>
@@ -35,7 +109,7 @@ export function DashboardPage() {
         }
       />
       <div className="grid gap-4 xl:grid-cols-4">
-        {dashboardMetrics.map((metric) => (
+        {liveMetrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
@@ -82,7 +156,7 @@ export function DashboardPage() {
               <p className="mt-1 text-sm text-neutral">Role requests awaiting admin approval or rejection.</p>
             </Link>
             <Link href="/no-submission-yet" className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">7</span>
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{dashboardData?.no_submission_yet ?? 7}</span>
               <strong className="mt-3 block text-sm font-semibold text-ink">No Submission Yet</strong>
               <p className="mt-1 text-sm text-neutral">Approved drive testers with no daily submission record for the selected date.</p>
             </Link>

@@ -3,6 +3,7 @@ import uuid
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from app.api.v1.router import api_v1_router
@@ -27,6 +28,15 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+
+# Add CORS middleware to allow admin-web frontend (and other origins from config)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.resolved_cors_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
