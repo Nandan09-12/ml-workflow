@@ -1,10 +1,8 @@
 "use client";
 
-import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
-import { workorders as mockWorkorders } from "@/lib/mock/data";
 import type {
   WorkorderRecord,
   SubmissionRecord,
@@ -21,7 +19,6 @@ export interface AdminWorkorderResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  isFallback: boolean;
 }
 
 function mapSubmission(item: ApiSubmissionItem): SubmissionRecord {
@@ -66,8 +63,6 @@ function mapWorkorder(item: ApiWorkorderDetailResponse): WorkorderDetailRecord {
 }
 
 export function useAdminWorkorder(workorderId: string): AdminWorkorderResult {
-  const fallbackRef = useRef<WorkorderDetailRecord | null>(null);
-
   const { data, isLoading, isError, error } = useQuery({
     queryKey: queryKeys.workorder(workorderId),
     queryFn: async () => {
@@ -81,29 +76,10 @@ export function useAdminWorkorder(workorderId: string): AdminWorkorderResult {
     },
   });
 
-  if (isError) {
-    const err = error as Error;
-    const is4xx = err instanceof ApiError && err.status >= 400 && err.status < 500;
-    if (!is4xx && !fallbackRef.current) {
-      const found = mockWorkorders.find((w) => w.id === workorderId);
-      fallbackRef.current = found ? { ...found, submissions: [] } : null;
-    }
-    return {
-      workorder: is4xx ? null : fallbackRef.current,
-      isLoading: false,
-      isError: true,
-      error: err,
-      isFallback: !is4xx,
-    };
-  }
-
-  if (data) fallbackRef.current = null;
-
   return {
     workorder: data ? mapWorkorder(data) : null,
     isLoading,
-    isError: false,
-    error: null,
-    isFallback: false,
+    isError,
+    error: error instanceof Error ? error : null,
   };
 }

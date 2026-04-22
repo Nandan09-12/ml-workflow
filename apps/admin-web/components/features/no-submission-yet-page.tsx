@@ -14,7 +14,7 @@ export function NoSubmissionYetPage() {
   const [workDate, setWorkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [page, setPage] = useState(1);
 
-  const { items, pagination, isLoading, isError, error, isFallback } = useNoSubmissionYet({
+  const { items, pagination, isLoading, isError, error } = useNoSubmissionYet({
     work_date: workDate,
     page,
     page_size: 20,
@@ -26,12 +26,7 @@ export function NoSubmissionYetPage() {
       <Alert title="Meaning of this view" tone="info">
         No daily submission record exists for the selected date. This is not assignment-based in V1. It only compares approved drive testers against daily submissions created on that date.
       </Alert>
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Live data is temporarily unavailable. Showing cached data.
-        </Alert>
-      )}
-      {isError && !isFallback && (
+      {isError && (
         <Alert title="Error loading data" tone="danger">
           {error instanceof Error ? error.message : "Failed to load no-submission-yet list"}
         </Alert>

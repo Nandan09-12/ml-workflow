@@ -3,15 +3,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date
 
-from sqlalchemy import and_, func, not_, select
+from sqlalchemy import func, select
 
-from app.core.enums import Shift, SubmissionStatus, WorkorderStatus
+from app.core.enums import Region, Shift, SubmissionStatus, WorkorderStatus
 from app.models.app_user import AppUser
 from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.workorder import Workorder
 from app.repositories.base import BaseRepository
+from app.repositories.submission_filters import apply_admin_submission_filters
 
 
 class SubmissionRepository(BaseRepository):
@@ -90,6 +91,9 @@ class SubmissionRepository(BaseRepository):
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
         workorder_status: WorkorderStatus | None = None,
+        region: Region | None = None,
+        workorder_code: str | None = None,
+        tester: str | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -99,7 +103,7 @@ class SubmissionRepository(BaseRepository):
         items_query = select(Submission)
         count_query = select(func.count(Submission.id))
 
-        items_query, count_query = self._apply_admin_filters(
+        items_query, count_query = apply_admin_submission_filters(
             items_query,
             count_query,
             work_date=work_date,
@@ -108,6 +112,9 @@ class SubmissionRepository(BaseRepository):
             status=status,
             shift=shift,
             workorder_status=workorder_status,
+            region=region,
+            workorder_code=workorder_code,
+            tester=tester,
             owner_user_id=owner_user_id,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,
@@ -191,76 +198,6 @@ class SubmissionRepository(BaseRepository):
 
         async with self.session.begin():
             yield
-
-    @staticmethod
-    def _apply_admin_filters(
-        items_query: object,
-        count_query: object,
-        *,
-        work_date: date | None,
-        date_from: date | None,
-        date_to: date | None,
-        status: SubmissionStatus | None,
-        shift: Shift | None,
-        workorder_status: WorkorderStatus | None,
-        owner_user_id: uuid.UUID | None,
-        ticket_number: str | None,
-        file_submission_pending: bool | None,
-    ) -> tuple[object, object]:
-        if work_date is not None:
-            items_query = items_query.where(Submission.work_date == work_date)
-            count_query = count_query.where(Submission.work_date == work_date)
-        if date_from is not None:
-            items_query = items_query.where(Submission.work_date >= date_from)
-            count_query = count_query.where(Submission.work_date >= date_from)
-        if date_to is not None:
-            items_query = items_query.where(Submission.work_date <= date_to)
-            count_query = count_query.where(Submission.work_date <= date_to)
-        if status is not None:
-            items_query = items_query.where(Submission.status == status)
-            count_query = count_query.where(Submission.status == status)
-        if shift is not None:
-            items_query = items_query.where(Submission.shift == shift)
-            count_query = count_query.where(Submission.shift == shift)
-        if workorder_status is not None:
-            items_query = items_query.where(
-                Submission.workorder_id == Workorder.id,
-                Workorder.status == workorder_status,
-            )
-            count_query = count_query.where(
-                Submission.workorder_id == Workorder.id,
-                Workorder.status == workorder_status,
-            )
-        if owner_user_id is not None:
-            items_query = items_query.where(Submission.owner_user_id == owner_user_id)
-            count_query = count_query.where(Submission.owner_user_id == owner_user_id)
-        if ticket_number:
-            pattern = f"%{ticket_number.strip()}%"
-            items_query = items_query.where(Submission.ticket_number.ilike(pattern))
-            count_query = count_query.where(Submission.ticket_number.ilike(pattern))
-
-        if file_submission_pending is not None:
-            active_attachment_count = (
-                select(func.count(SubmissionAttachment.id))
-                .where(
-                    SubmissionAttachment.submission_id == Submission.id,
-                    SubmissionAttachment.is_active.is_(True),
-                )
-                .correlate(Submission)
-                .scalar_subquery()
-            )
-            pending_predicate = and_(
-                Submission.status == SubmissionStatus.CHECKED_OUT,
-                active_attachment_count == 0,
-            )
-            if file_submission_pending:
-                items_query = items_query.where(pending_predicate)
-                count_query = count_query.where(pending_predicate)
-            else:
-                items_query = items_query.where(not_(pending_predicate))
-                count_query = count_query.where(not_(pending_predicate))
-
-        return items_query, count_query
 
     async def get_workorder_by_id(self, workorder_id: uuid.UUID) -> Workorder | None:
         query = select(Workorder).where(Workorder.id == workorder_id)

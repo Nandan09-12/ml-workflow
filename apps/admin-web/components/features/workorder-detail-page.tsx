@@ -22,7 +22,7 @@ interface WorkorderDetailPageProps {
 }
 
 export function WorkorderDetailPage({ workorderId }: WorkorderDetailPageProps) {
-  const { workorder, isLoading, isError, error, isFallback } = useAdminWorkorder(workorderId);
+  const { workorder, isLoading, isError, error } = useAdminWorkorder(workorderId);
   const editMutation = useEditWorkorder();
 
   const [editOpen, setEditOpen] = useState(false);
@@ -51,7 +51,7 @@ export function WorkorderDetailPage({ workorderId }: WorkorderDetailPageProps) {
   }
 
   if (isLoading) return <LoadingState />;
-  if (isError && !isFallback) {
+  if (isError) {
     return <ErrorState title="Failed to load workorder" description={error?.message ?? "An unexpected error occurred."} />;
   }
   if (!workorder) return <ErrorState title="Workorder not found" description="The requested workorder could not be found." />;
@@ -61,11 +61,6 @@ export function WorkorderDetailPage({ workorderId }: WorkorderDetailPageProps) {
   return (
     <>
       <div className="space-y-6">
-        {isFallback && (
-          <Alert title="Using cached data" tone="info">
-            Live workorder data is temporarily unavailable. Showing cached data.
-          </Alert>
-        )}
         <PageHeader
           kicker="Workorder"
           title={workorder.workorderCode}

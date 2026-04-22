@@ -14,7 +14,6 @@ const defaultHookResult = {
   isLoading: false,
   isError: false,
   error: null,
-  isFallback: false,
 };
 
 describe("WorkordersPage", () => {

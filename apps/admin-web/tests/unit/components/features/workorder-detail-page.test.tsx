@@ -15,7 +15,6 @@ const defaultHookResult = {
   isLoading: false,
   isError: false,
   error: null,
-  isFallback: false,
 };
 
 const mockEditMutation = { mutate: vi.fn(), isPending: false, isError: false, error: null };
@@ -70,23 +69,11 @@ describe("WorkorderDetailPage", () => {
       isLoading: false,
       isError: true,
       error: new Error("Not found"),
-      isFallback: false,
     } as ReturnType<typeof useAdminWorkorder>);
 
     render(<WorkorderDetailPage workorderId="wo-1" />);
 
     expect(screen.getByText(/failed to load workorder/i)).toBeInTheDocument();
-  });
-
-  it("shows fallback alert banner when using cached data", () => {
-    mockUseAdminWorkorder.mockReturnValueOnce({
-      ...defaultHookResult,
-      isFallback: true,
-    } as ReturnType<typeof useAdminWorkorder>);
-
-    render(<WorkorderDetailPage workorderId="wo-1" />);
-
-    expect(screen.getByText(/using cached data/i)).toBeInTheDocument();
   });
 
   it("opens the edit drawer when 'Edit Workorder' button is clicked", () => {

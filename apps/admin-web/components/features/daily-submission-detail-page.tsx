@@ -44,7 +44,7 @@ function attachmentItemToTimeline(item: ApiAttachmentHistoryItem) {
 }
 
 export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetailPageProps) {
-  const { submission, isLoading, isError, error, isFallback } = useAdminSubmission(submissionId);
+  const { submission, isLoading, isError, error } = useAdminSubmission(submissionId);
   const { items: auditItems, isLoading: auditLoading } = useSubmissionAudit(submissionId);
   const { items: attachmentItems, isLoading: attachmentLoading } = useSubmissionAttachmentHistory(submissionId);
 
@@ -96,7 +96,7 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
   }
 
   if (isLoading) return <LoadingState />;
-  if (isError && !isFallback) {
+  if (isError) {
     return <ErrorState title="Failed to load submission" description={error?.message ?? "An unexpected error occurred."} />;
   }
   if (!submission) return <ErrorState title="Submission not found" description="The requested submission could not be found." />;
@@ -126,11 +126,6 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
               </div>
             }
           />
-          {isFallback && (
-            <Alert title="Using cached data" tone="info">
-              Live submission data is temporarily unavailable. Showing cached data.
-            </Alert>
-          )}
           {submission.fileSubmissionPending ? (
             <Alert title="Closeout file is missing" tone="warning">
               This daily submission has been checked out but has no active CSV or XLSX attachment.

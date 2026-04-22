@@ -1,10 +1,8 @@
 "use client";
 
-import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
-import { noSubmissionYet as mockNoSubmissionYet } from "@/lib/mock/data";
 import type { NoSubmissionYetRecord, ApiNoSubmissionYetItem, HookPagination } from "@/lib/types/domain";
 
 export interface NoSubmissionYetParams {
@@ -27,15 +25,7 @@ export interface NoSubmissionYetResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  isFallback: boolean;
 }
-
-const mockPagination: HookPagination = {
-  page: 1,
-  pageSize: 20,
-  total: mockNoSubmissionYet.length,
-  totalPages: 1,
-};
 
 function mapItem(item: ApiNoSubmissionYetItem): NoSubmissionYetRecord {
   return {
@@ -57,48 +47,26 @@ function buildQueryString(params: NoSubmissionYetParams): string {
 }
 
 export function useNoSubmissionYet(params: NoSubmissionYetParams): NoSubmissionYetResult {
-  const fallbackUsedRef = useRef(false);
   const qs = buildQueryString(params);
 
   const query = useQuery({
     queryKey: queryKeys.noSubmissionYet(params.work_date),
-    queryFn: async () => {
-      fallbackUsedRef.current = false;
-      try {
-        return await apiGet<ApiNoSubmissionYetResponse>(
-          `/admin/dashboard/no-submission-yet${qs}`,
-        );
-      } catch (error) {
-        if (error instanceof ApiError) {
-          if (error.status >= 500) {
-            fallbackUsedRef.current = true;
-            return null;
-          }
-          throw error;
-        }
-        fallbackUsedRef.current = true;
-        return null;
+    queryFn: async () =>
+      await apiGet<ApiNoSubmissionYetResponse>(`/admin/dashboard/no-submission-yet${qs}`),
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        return false;
       }
+      return failureCount < 1;
     },
     staleTime: 2 * 60 * 1000,
   });
-
-  if (query.data === null) {
-    return {
-      items: mockNoSubmissionYet,
-      pagination: mockPagination,
-      isLoading: false,
-      isError: false,
-      error: null,
-      isFallback: true,
-    };
-  }
 
   const items = (query.data?.items ?? []).map(mapItem);
   const raw = query.data?.pagination;
   const pagination: HookPagination = raw
     ? { page: raw.page, pageSize: raw.page_size, total: raw.total, totalPages: raw.total_pages }
-    : mockPagination;
+    : { page: 1, pageSize: params.page_size ?? 20, total: 0, totalPages: 0 };
 
   return {
     items,
@@ -106,6 +74,5 @@ export function useNoSubmissionYet(params: NoSubmissionYetParams): NoSubmissionY
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
-    isFallback: fallbackUsedRef.current,
   };
 }

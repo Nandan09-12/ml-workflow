@@ -263,6 +263,10 @@ Response includes:
 - aggregate workorder progress values
 - child daily submission list
 
+Error semantics:
+- `404` when `workorder_id` is a valid UUID but no workorder exists.
+- `422` when `workorder_id` is not a valid UUID.
+
 ### PATCH /api/v1/admin/workorders/{workorder_id}
 Admin edits workorder fields.
 
@@ -295,6 +299,10 @@ Response includes:
 - `file_submission_pending`
 - nested workorder summary with aggregate progress values
 
+Error semantics:
+- `404` when `submission_id` is a valid UUID but no submission exists.
+- `422` when `submission_id` is not a valid UUID.
+
 ### PATCH /api/v1/admin/submissions/{submission_id}
 Admin edits any daily submission, including `COMPLETED` submissions.
 
@@ -310,6 +318,22 @@ Rules:
 
 ### GET /api/v1/admin/submissions/{submission_id}/audit
 Get full daily submission audit history.
+
+Response shape:
+- `items`: array of audit entries
+- `count`: number of audit entries
+
+Each audit item includes:
+- `id`
+- `submission_id`
+- `action_type`
+- `actor_user_id`
+- `actor_role`
+- `source`
+- `changed_fields_json`
+- `before_snapshot_json`
+- `after_snapshot_json`
+- `created_at`
 
 ### GET /api/v1/admin/submissions/{submission_id}/attachments/history
 Get attachment history, including inactive attachment records.

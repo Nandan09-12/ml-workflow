@@ -146,6 +146,9 @@ class FakeSubmissionRepository:
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
         workorder_status: WorkorderStatus | None = None,
+        region: Region | None = None,
+        workorder_code: str | None = None,
+        tester: str | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -170,6 +173,31 @@ class FakeSubmissionRepository:
                 if (workorder := self.workorders.get(submission.workorder_id)) is not None
                 and workorder.status == workorder_status
             ]
+        if region is not None:
+            items = [
+                submission
+                for submission in items
+                if (workorder := self.workorders.get(submission.workorder_id)) is not None
+                and workorder.region == region
+            ]
+        if workorder_code is not None:
+            needle = workorder_code.strip().lower()
+            if needle:
+                items = [
+                    submission
+                    for submission in items
+                    if (workorder := self.workorders.get(submission.workorder_id)) is not None
+                    and needle in workorder.workorder_code.lower()
+                ]
+        if tester is not None:
+            needle = tester.strip().lower()
+            if needle:
+                items = [
+                    submission
+                    for submission in items
+                    if needle in submission.submitter_name_snapshot.lower()
+                    or needle in submission.submitter_email_snapshot.lower()
+                ]
         if owner_user_id is not None:
             items = [submission for submission in items if submission.owner_user_id == owner_user_id]
         if ticket_number is not None:
@@ -254,15 +282,17 @@ def _auth_payload(user: AppUser) -> dict[str, Any]:
 def _workorder(
     owner_user_id: uuid.UUID,
     *,
+    workorder_code: str = "WO-UNIT",
+    region: Region = Region.NE_UP,
     total_grids: int = 20,
     status: WorkorderStatus = WorkorderStatus.ACTIVE,
 ) -> Workorder:
     now = datetime.now(UTC)
     return Workorder(
         id=uuid.uuid4(),
-        workorder_code="WO-UNIT",
-        workorder_code_normalized="WO-UNIT",
-        region=Region.NE_UP,
+        workorder_code=workorder_code,
+        workorder_code_normalized=workorder_code.strip().upper().replace(" ", ""),
+        region=region,
         total_grids=total_grids,
         status=status,
         created_at=now,
@@ -1166,6 +1196,83 @@ async def test_list_admin_submissions_filters_by_workorder_status() -> None:
     assert total == 1
     assert len(views) == 1
     assert views[0].workorder_id == completed_workorder.id
+
+
+async def test_list_admin_submissions_filters_by_region() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    ne_workorder = _workorder(repo.owner_user.id, total_grids=10, region=Region.NE_UP)
+    sw_workorder = _workorder(repo.owner_user.id, total_grids=10, region=Region.SOUTH_FLORIDA)
+    ne_submission = _submission(repo.owner_user.id, workorder_id=ne_workorder.id)
+    sw_submission = _submission(repo.owner_user.id, workorder_id=sw_workorder.id)
+    repo.workorders[ne_workorder.id] = ne_workorder
+    repo.workorders[sw_workorder.id] = sw_workorder
+    repo.submissions.extend([ne_submission, sw_submission])
+
+    views, total = await service.list_admin_submissions(
+        _auth_payload(repo.admin_user),
+        region=Region.SOUTH_FLORIDA,
+    )
+
+    assert total == 1
+    assert len(views) == 1
+    assert views[0].workorder_id == sw_workorder.id
+
+
+async def test_list_admin_submissions_filters_by_workorder_code_contains() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+    first_workorder = _workorder(repo.owner_user.id, total_grids=10, workorder_code="WO-ALPHA-001")
+    second_workorder = _workorder(repo.owner_user.id, total_grids=10, workorder_code="WO-BETA-002")
+    first_submission = _submission(repo.owner_user.id, workorder_id=first_workorder.id)
+    second_submission = _submission(repo.owner_user.id, workorder_id=second_workorder.id)
+    repo.workorders[first_workorder.id] = first_workorder
+    repo.workorders[second_workorder.id] = second_workorder
+    repo.submissions.extend([first_submission, second_submission])
+
+    views, total = await service.list_admin_submissions(
+        _auth_payload(repo.admin_user),
+        workorder_code="alpha",
+    )
+
+    assert total == 1
+    assert len(views) == 1
+    assert views[0].workorder_id == first_workorder.id
+
+
+async def test_list_admin_submissions_filters_by_tester_name_or_email_contains() -> None:
+    repo = FakeSubmissionRepository()
+    service = SubmissionService(repository=repo)
+
+    owner_workorder = _workorder(repo.owner_user.id, total_grids=10)
+    other_workorder = _workorder(repo.other_user.id, total_grids=10, workorder_code="WO-OTHER")
+    owner_submission = _submission(repo.owner_user.id, workorder_id=owner_workorder.id)
+    other_submission = _submission(repo.other_user.id, workorder_id=other_workorder.id)
+    owner_submission.submitter_name_snapshot = repo.owner_user.full_name
+    owner_submission.submitter_email_snapshot = repo.owner_user.email
+    other_submission.submitter_name_snapshot = repo.other_user.full_name
+    other_submission.submitter_email_snapshot = repo.other_user.email
+
+    repo.workorders[owner_workorder.id] = owner_workorder
+    repo.workorders[other_workorder.id] = other_workorder
+    repo.submissions.extend([owner_submission, other_submission])
+
+    views_by_name, total_by_name = await service.list_admin_submissions(
+        _auth_payload(repo.admin_user),
+        tester="owner user",
+    )
+    views_by_email, total_by_email = await service.list_admin_submissions(
+        _auth_payload(repo.admin_user),
+        tester="other@example.com",
+    )
+
+    assert total_by_name == 1
+    assert len(views_by_name) == 1
+    assert views_by_name[0].owner_user_id == repo.owner_user.id
+
+    assert total_by_email == 1
+    assert len(views_by_email) == 1
+    assert views_by_email[0].owner_user_id == repo.other_user.id
 
 
 # ---------------------------------------------------------------------------

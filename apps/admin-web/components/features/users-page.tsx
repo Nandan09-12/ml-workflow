@@ -39,7 +39,7 @@ export function UsersPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const { items, pagination, isLoading, isError, error, isFallback } = useAdminUsers({
+  const { items, pagination, isLoading, isError, error } = useAdminUsers({
     requested_role: filters.role !== "ALL" ? filters.role : undefined,
     account_status: filters.accountStatus !== "ALL" ? filters.accountStatus : undefined,
     page: filters.page,
@@ -72,12 +72,7 @@ export function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker="Access Management" title="Users" subtitle="All app users with role and account-status filters. Admin-only access decisions remain explicit and auditable." />
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Live users data is temporarily unavailable. Showing cached data.
-        </Alert>
-      )}
-      {isError && !isFallback && (
+      {isError && (
         <Alert title="Error loading users" tone="danger">
           {error instanceof Error ? error.message : "Failed to load users"}
         </Alert>
