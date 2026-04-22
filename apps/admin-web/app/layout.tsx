@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AdminShell } from "@/components/layout/admin-shell";
+import { AdminGuard } from "@/components/auth/AdminGuard";
 import Providers from "@/app/providers";
 import "@/app/globals.css";
 
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en">
       <body>
         <Providers>
-          <AdminShell>{children}</AdminShell>
+          <AdminGuard>
+            <AdminShell>{children}</AdminShell>
+          </AdminGuard>
         </Providers>
       </body>
     </html>

@@ -1,5 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import DashboardRoute from "@/app/dashboard/page";
 import DailySubmissionsRoute from "@/app/daily-submissions/page";
 import DailySubmissionDetailRoute from "@/app/daily-submissions/[submissionId]/page";
@@ -10,9 +12,39 @@ import UsersRoute from "@/app/users/page";
 import WorkorderDetailRoute from "@/app/workorders/[workorderId]/page";
 import WorkordersRoute from "@/app/workorders/page";
 
+vi.mock("@/lib/hooks/use-dashboard-summary", () => ({
+  useDashboardSummary: vi.fn(() => ({
+    data: {
+      approved_drive_testers: 12,
+      ongoing_submissions: 5,
+      completed_submissions: 41,
+      no_submission_yet: 7,
+      active_workorders: 18,
+      completed_workorders: 3,
+      reference_date: "2026-04-20",
+    },
+    isLoading: false,
+    isError: false,
+    error: null,
+    status: "success",
+    isFallback: false,
+  })),
+}));
+
 describe("route smoke tests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders the dashboard route", () => {
-    render(<DashboardRoute />);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardRoute />
+      </QueryClientProvider>
+    );
 
     expect(screen.getByRole("heading", { name: "Operations Summary" })).toBeInTheDocument();
   });
