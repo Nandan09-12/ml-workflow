@@ -76,6 +76,10 @@ vi.mock("@/lib/hooks/use-reopen-submission", () => ({
   useReopenSubmission: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
 }));
 
+vi.mock("@/lib/hooks/use-attachment-download", () => ({
+  useAttachmentDownload: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
+}));
+
 vi.mock("@/lib/hooks/use-admin-workorder", () => ({
   useAdminWorkorder: vi.fn(() => ({
     workorder: { id: "wo-1", workorderCode: "WO-NE-401", region: "NE_UP", totalGrids: 145, completedGrids: 91, skippedGrids: 8, remainingGrids: 46, progressPercent: 68, status: "ACTIVE", createdAt: "2026-04-16 08:20 AM", updatedAt: "2026-04-20 05:41 PM", submissions: [] },

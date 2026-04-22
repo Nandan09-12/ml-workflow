@@ -29,6 +29,15 @@ vi.mock("@/lib/hooks/use-reopen-submission", () => ({
   useReopenSubmission: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, error: null })),
 }));
 
+vi.mock("@/lib/hooks/use-attachment-download", () => ({
+  useAttachmentDownload: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+}));
+
 describe("DailySubmissionDetailPage", () => {
   it("shows the file pending warning for checked-out submissions without an active file", () => {
     render(<DailySubmissionDetailPage submissionId={sub1.id} />);

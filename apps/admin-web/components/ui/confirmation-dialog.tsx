@@ -1,6 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { clsx } from "clsx";
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -25,6 +29,41 @@ export function ConfirmationDialog({
   tone = "danger",
   isLoading,
 }: ConfirmationDialogProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    const focusables = panel?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    focusables?.[0]?.focus();
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !isLoading) {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === "Tab" && panel) {
+        const all = Array.from(
+          panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+        );
+        if (!all.length) return;
+        const first = all[0];
+        const last = all[all.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, isLoading, onClose]);
+
   if (!isOpen) return null;
 
   const confirmBtnClass =
@@ -46,7 +85,7 @@ export function ConfirmationDialog({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-md rounded-panel border border-line bg-white p-6 shadow-xl">
+      <div ref={panelRef} className="relative z-10 w-full max-w-md rounded-panel border border-line bg-white p-6 shadow-xl">
         <h2
           id="confirmation-dialog-title"
           className="text-base font-semibold text-ink"
