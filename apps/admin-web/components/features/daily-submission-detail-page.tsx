@@ -17,6 +17,7 @@ import { useSubmissionAudit } from "@/lib/hooks/use-submission-audit";
 import { useSubmissionAttachmentHistory } from "@/lib/hooks/use-submission-attachment-history";
 import { useEditSubmission } from "@/lib/hooks/use-edit-submission";
 import { useReopenSubmission } from "@/lib/hooks/use-reopen-submission";
+import { useAttachmentDownload } from "@/lib/hooks/use-attachment-download";
 import { formatRegion } from "@/lib/format/labels";
 import type { ApiAuditItem, ApiAttachmentHistoryItem } from "@/lib/types/domain";
 
@@ -49,6 +50,8 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
 
   const editMutation = useEditSubmission();
   const reopenMutation = useReopenSubmission();
+  const downloadMutation = useAttachmentDownload();
+  const activeAttachment = attachmentItems.find((item) => item.is_active) ?? null;
 
   const [editOpen, setEditOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -187,10 +190,37 @@ export function DailySubmissionDetailPage({ submissionId }: DailySubmissionDetai
           <Panel>
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Active Attachment</p>
             <div className="mt-4">
-              {submission.fileSubmissionPending ? (
+              {attachmentLoading ? (
+                <p className="text-sm text-neutral">Loading…</p>
+              ) : !activeAttachment ? (
                 <p className="text-sm text-neutral">No active file yet.</p>
               ) : (
-                <p className="text-sm text-neutral">File attached. Download available from the mobile app.</p>
+                <div className="space-y-3">
+                  <div className="rounded-panel border border-line bg-slate-50 p-3">
+                    <p className="truncate text-sm font-semibold text-ink">{activeAttachment.file_name}</p>
+                    <p className="mt-1 text-xs text-neutral">
+                      {activeAttachment.mime_type} · {(activeAttachment.file_size_bytes / 1024 / 1024).toFixed(1)} MB
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral">
+                      Uploaded {new Date(activeAttachment.uploaded_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => downloadMutation.mutate(activeAttachment.id)}
+                    disabled={downloadMutation.isPending}
+                    className="w-full rounded-panel border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand/5 disabled:opacity-50"
+                  >
+                    {downloadMutation.isPending ? "Getting link…" : "Download File"}
+                  </button>
+                  {downloadMutation.isError && (
+                    <Alert title="Download failed" tone="danger">
+                      {downloadMutation.error instanceof Error
+                        ? downloadMutation.error.message
+                        : "Could not generate download link."}
+                    </Alert>
+                  )}
+                </div>
               )}
             </div>
           </Panel>
