@@ -15,6 +15,8 @@
  *   pnpm --filter admin-web test:integration
  */
 
+import { describe, it, expect, beforeAll } from "vitest";
+
 const BASE_URL = process.env.INTEGRATION_API_URL ?? "http://localhost:8000/api/v1";
 const TOKEN = process.env.INTEGRATION_API_TOKEN ?? "";
 const hasCredentials = TOKEN.length > 0;
