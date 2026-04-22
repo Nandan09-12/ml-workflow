@@ -1,10 +1,8 @@
 "use client";
 
-import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
-import { users as mockUsers } from "@/lib/mock/data";
 import type { UserRecord, ApiUserItem, HookPagination } from "@/lib/types/domain";
 
 export interface AdminUsersParams {
@@ -25,15 +23,7 @@ export interface AdminUsersResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  isFallback: boolean;
 }
-
-const mockPagination: HookPagination = {
-  page: 1,
-  pageSize: 20,
-  total: mockUsers.length,
-  totalPages: 1,
-};
 
 function mapItem(item: ApiUserItem): UserRecord {
   return {
@@ -60,7 +50,6 @@ function buildQueryString(params: AdminUsersParams): string {
 }
 
 export function useAdminUsers(params: AdminUsersParams): AdminUsersResult {
-  const fallbackUsedRef = useRef(false);
   const qs = buildQueryString(params);
 
   const filterRecord: Record<string, string> = {};
@@ -72,41 +61,21 @@ export function useAdminUsers(params: AdminUsersParams): AdminUsersResult {
     queryKey: queryKeys.users(
       Object.keys(filterRecord).length > 0 ? filterRecord : undefined,
     ),
-    queryFn: async () => {
-      fallbackUsedRef.current = false;
-      try {
-        return await apiGet<ApiUsersListResponse>(`/admin/users${qs}`);
-      } catch (error) {
-        if (error instanceof ApiError) {
-          if (error.status >= 500) {
-            fallbackUsedRef.current = true;
-            return null;
-          }
-          throw error;
-        }
-        fallbackUsedRef.current = true;
-        return null;
+    queryFn: async () => await apiGet<ApiUsersListResponse>(`/admin/users${qs}`),
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        return false;
       }
+      return failureCount < 1;
     },
     staleTime: 2 * 60 * 1000,
   });
-
-  if (query.data === null) {
-    return {
-      items: mockUsers,
-      pagination: mockPagination,
-      isLoading: false,
-      isError: false,
-      error: null,
-      isFallback: true,
-    };
-  }
 
   const items = (query.data?.items ?? []).map(mapItem);
   const raw = query.data?.pagination;
   const pagination: HookPagination = raw
     ? { page: raw.page, pageSize: raw.page_size, total: raw.total, totalPages: raw.total_pages }
-    : mockPagination;
+    : { page: 1, pageSize: params.page_size ?? 20, total: 0, totalPages: 0 };
 
   return {
     items,
@@ -114,6 +83,5 @@ export function useAdminUsers(params: AdminUsersParams): AdminUsersResult {
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
-    isFallback: fallbackUsedRef.current,
   };
 }

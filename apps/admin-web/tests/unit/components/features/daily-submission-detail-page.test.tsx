@@ -9,7 +9,7 @@ const sub2 = submissions.find((s) => s.id === "sub-2")!;
 vi.mock("@/lib/hooks/use-admin-submission", () => ({
   useAdminSubmission: vi.fn((id: string) => {
     const found = submissions.find((s) => s.id === id) ?? submissions[0];
-    return { submission: found, isLoading: false, isError: false, error: null, isFallback: false };
+    return { submission: found, isLoading: false, isError: false, error: null };
   }),
 }));
 

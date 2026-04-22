@@ -9,7 +9,6 @@ const defaultHookResult = {
   isLoading: false,
   isError: false,
   error: null,
-  isFallback: false,
 };
 
 const mockApproveMutation = { mutate: vi.fn(), isPending: false, isError: false, error: null, isPending_: false };
@@ -93,22 +92,10 @@ describe("PendingUsersPage", () => {
       isLoading: false,
       isError: true,
       error: new Error("Failed to fetch"),
-      isFallback: false,
     } as unknown as ReturnType<typeof usePendingUsers>);
 
     render(<PendingUsersPage />);
 
     expect(screen.getByText(/error loading pending users/i)).toBeInTheDocument();
-  });
-
-  it("shows fallback alert banner when using cached data", () => {
-    mockUsePendingUsers.mockReturnValueOnce({
-      ...defaultHookResult,
-      isFallback: true,
-    } as unknown as ReturnType<typeof usePendingUsers>);
-
-    render(<PendingUsersPage />);
-
-    expect(screen.getByText(/using cached data/i)).toBeInTheDocument();
   });
 });

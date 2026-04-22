@@ -15,6 +15,7 @@
  *   pnpm --filter admin-web test:integration
  */
 
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll } from "vitest";
 
 const BASE_URL = process.env.INTEGRATION_API_URL ?? "http://localhost:8000/api/v1";
@@ -595,7 +596,7 @@ describe.skipIf(!hasCredentials)("GET /admin/submissions/{id} — contract", () 
   });
 
   it("404 for a non-existent submission ID", async () => {
-    const res = await fetch(`${BASE_URL}/admin/submissions/non-existent-id-000`, {
+    const res = await fetch(`${BASE_URL}/admin/submissions/${randomUUID()}`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
     });
     expect(res.status).toBe(404);
@@ -641,14 +642,17 @@ describe.skipIf(!hasCredentials)("GET /admin/submissions/{id}/audit — contract
       assertKeys("audit item", item, [
         "id",
         "submission_id",
-        "changed_by_user_id",
-        "changed_at",
-        "change_type",
-        "before_snapshot",
-        "after_snapshot",
+        "action_type",
+        "actor_user_id",
+        "actor_role",
+        "source",
+        "changed_fields_json",
+        "before_snapshot_json",
+        "after_snapshot_json",
+        "created_at",
       ]);
-      expect(typeof item.change_type).toBe("string");
-      expect(typeof item.changed_at).toBe("string");
+      expect(typeof item.action_type).toBe("string");
+      expect(typeof item.created_at).toBe("string");
     }
   });
 });
@@ -774,7 +778,7 @@ describe.skipIf(!hasCredentials)("GET /admin/workorders/{id} — contract", () =
   });
 
   it("404 for a non-existent workorder ID", async () => {
-    const res = await fetch(`${BASE_URL}/admin/workorders/non-existent-id-000`, {
+    const res = await fetch(`${BASE_URL}/admin/workorders/${randomUUID()}`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
     });
     expect(res.status).toBe(404);

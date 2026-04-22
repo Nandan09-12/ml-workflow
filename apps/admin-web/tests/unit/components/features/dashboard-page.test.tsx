@@ -4,12 +4,30 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import { DashboardPage } from "@/components/features/dashboard-page";
 import { useDashboardSummary } from "@/lib/hooks/use-dashboard-summary";
+import { useAdminWorkorders } from "@/lib/hooks/use-admin-workorders";
+import { useAdminSubmissions } from "@/lib/hooks/use-admin-submissions";
+import { usePendingUsers } from "@/lib/hooks/use-pending-users";
 
 vi.mock("@/lib/hooks/use-dashboard-summary", () => ({
   useDashboardSummary: vi.fn(),
 }));
 
+vi.mock("@/lib/hooks/use-admin-workorders", () => ({
+  useAdminWorkorders: vi.fn(),
+}));
+
+vi.mock("@/lib/hooks/use-admin-submissions", () => ({
+  useAdminSubmissions: vi.fn(),
+}));
+
+vi.mock("@/lib/hooks/use-pending-users", () => ({
+  usePendingUsers: vi.fn(),
+}));
+
 const mockUseDashboardSummary = vi.mocked(useDashboardSummary);
+const mockUseAdminWorkorders = vi.mocked(useAdminWorkorders);
+const mockUseAdminSubmissions = vi.mocked(useAdminSubmissions);
+const mockUsePendingUsers = vi.mocked(usePendingUsers);
 
 const mockDashboardData = {
   approved_drive_testers: 12,
@@ -40,6 +58,27 @@ function renderWithQueryClient(component: React.ReactNode) {
 describe("DashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseAdminWorkorders.mockReturnValue({
+      items: [],
+      pagination: { page: 1, pageSize: 4, total: 0, totalPages: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never);
+    mockUseAdminSubmissions.mockReturnValue({
+      items: [],
+      pagination: { page: 1, pageSize: 5, total: 0, totalPages: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never);
+    mockUsePendingUsers.mockReturnValue({
+      items: [],
+      count: 0,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never);
   });
 
   it("displays loading spinner while fetching dashboard data", async () => {
@@ -49,7 +88,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "pending",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);
@@ -64,7 +102,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);
@@ -80,24 +117,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("41")).toBeInTheDocument(); // Completed submissions
   });
 
-  it("displays fallback banner when using mock data", async () => {
-    mockUseDashboardSummary.mockReturnValue({
-      data: mockDashboardData,
-      isLoading: false,
-      isError: false,
-      error: null,
-      status: "success",
-      isFallback: true,
-    } as never);
-
-    renderWithQueryClient(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/using cached data/i)).toBeInTheDocument();
-    });
-  });
-
-  it("displays error message for 4xx client error without fallback", async () => {
+  it("displays error message for 4xx client error", async () => {
     const error = new Error("Forbidden");
     mockUseDashboardSummary.mockReturnValue({
       data: undefined,
@@ -105,7 +125,6 @@ describe("DashboardPage", () => {
       isError: true,
       error: error as never,
       status: "error",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);
@@ -115,8 +134,6 @@ describe("DashboardPage", () => {
       expect(screen.getByText(/Forbidden/)).toBeInTheDocument();
     });
 
-    // Ensure fallback banner is NOT shown
-    expect(screen.queryByText(/using cached data/i)).not.toBeInTheDocument();
   });
 
   it("passes work_date filter to hook when date input changes", async () => {
@@ -126,7 +143,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     const { rerender } = renderWithQueryClient(<DashboardPage />);
@@ -154,7 +170,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);
@@ -173,7 +188,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     const { rerender } = renderWithQueryClient(<DashboardPage />);
@@ -186,6 +200,32 @@ describe("DashboardPage", () => {
 
     await waitFor(() => {
       expect(mockUseDashboardSummary).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("applies region filter to workorders and submissions widgets", async () => {
+    mockUseDashboardSummary.mockReturnValue({
+      data: mockDashboardData,
+      isLoading: false,
+      isError: false,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderWithQueryClient(<DashboardPage />);
+
+    fireEvent.change(screen.getByTestId("region-filter"), {
+      target: { value: "NE_UP" },
+    });
+
+    await waitFor(() => {
+      expect(mockUseAdminWorkorders).toHaveBeenLastCalledWith(
+        expect.objectContaining({ region: "NE_UP" })
+      );
+      expect(mockUseAdminSubmissions).toHaveBeenCalledWith(
+        expect.objectContaining({ region: "NE_UP" })
+      );
+      expect(screen.getByText(/Region filter applied/i)).toBeInTheDocument();
     });
   });
 
@@ -204,7 +244,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);
@@ -225,7 +264,6 @@ describe("DashboardPage", () => {
       isError: false,
       error: null,
       status: "success",
-      isFallback: false,
     } as never);
 
     renderWithQueryClient(<DashboardPage />);

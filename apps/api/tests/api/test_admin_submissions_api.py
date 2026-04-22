@@ -9,7 +9,7 @@ from app.api.v1.routers.admin_submissions import (
     get_admin_submission_service,
     get_attachment_service,
 )
-from app.core.enums import Shift, SubmissionStatus, WorkorderStatus
+from app.core.enums import Region, Shift, SubmissionStatus, WorkorderStatus
 from app.core.errors import AppError, ErrorCode
 from app.core.security import get_current_auth_payload
 
@@ -92,6 +92,9 @@ class FakeAdminSubmissionService:
         self.raise_admin_only = False
         self.last_file_submission_pending: bool | None = None
         self.last_workorder_status: WorkorderStatus | None = None
+        self.last_region: Region | None = None
+        self.last_workorder_code: str | None = None
+        self.last_tester: str | None = None
 
     async def reopen_submission(self, _: dict[str, Any], __: uuid.UUID) -> FakeSubmissionView:
         if self.raise_admin_only:
@@ -115,6 +118,9 @@ class FakeAdminSubmissionService:
         status: SubmissionStatus | None = None,
         shift: Shift | None = None,
         workorder_status: WorkorderStatus | None = None,
+        region: Region | None = None,
+        workorder_code: str | None = None,
+        tester: str | None = None,
         owner_user_id: uuid.UUID | None = None,
         ticket_number: str | None = None,
         file_submission_pending: bool | None = None,
@@ -124,6 +130,9 @@ class FakeAdminSubmissionService:
         if self.raise_admin_only:
             raise AppError(ErrorCode.ADMIN_ONLY, "Admin access required.", status_code=403)
         self.last_workorder_status = workorder_status
+        self.last_region = region
+        self.last_workorder_code = workorder_code
+        self.last_tester = tester
         self.last_file_submission_pending = file_submission_pending
         return [self.item], 1
 
@@ -238,6 +247,46 @@ def test_admin_submissions_list_success_with_workorder_status_filter(
     assert response.status_code == 200
     assert body["success"] is True
     assert admin_submission_service.last_workorder_status == WorkorderStatus.COMPLETED
+
+
+def test_admin_submissions_list_without_new_filters_is_compatible(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_submission_service: FakeAdminSubmissionService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_admin_submission_service] = lambda: admin_submission_service
+
+    response = client.get("/api/v1/admin/submissions")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert admin_submission_service.last_region is None
+    assert admin_submission_service.last_workorder_code is None
+    assert admin_submission_service.last_tester is None
+
+
+def test_admin_submissions_list_supports_region_workorder_code_and_tester_filters(
+    client: Any,
+    auth_payload_admin: dict[str, Any],
+    admin_submission_service: FakeAdminSubmissionService,
+) -> None:
+    app = client.app
+    app.dependency_overrides[get_current_auth_payload] = lambda: auth_payload_admin
+    app.dependency_overrides[get_admin_submission_service] = lambda: admin_submission_service
+
+    response = client.get(
+        "/api/v1/admin/submissions?region=SOUTH_FLORIDA&workorder_code=WO-77&tester=tester%40example.com"
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert admin_submission_service.last_region == Region.SOUTH_FLORIDA
+    assert admin_submission_service.last_workorder_code == "WO-77"
+    assert admin_submission_service.last_tester == "tester@example.com"
 
 
 def test_admin_submissions_list_enforces_admin_only_error_envelope(

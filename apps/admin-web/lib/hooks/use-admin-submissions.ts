@@ -1,16 +1,17 @@
 "use client";
 
-import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, ApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
-import { submissions as mockSubmissions } from "@/lib/mock/data";
 import type { SubmissionRecord, ApiSubmissionItem, HookPagination } from "@/lib/types/domain";
 
 export interface AdminSubmissionsParams {
   work_date?: string;
   date_from?: string;
   date_to?: string;
+  region?: string;
+  tester?: string;
+  workorder_code?: string;
   status?: string;
   shift?: string;
   file_submission_pending?: boolean;
@@ -29,15 +30,7 @@ export interface AdminSubmissionsResult {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
-  isFallback: boolean;
 }
-
-const mockPagination: HookPagination = {
-  page: 1,
-  pageSize: 20,
-  total: mockSubmissions.length,
-  totalPages: 1,
-};
 
 function mapItem(item: ApiSubmissionItem): SubmissionRecord {
   return {
@@ -68,6 +61,9 @@ function buildQueryString(params: AdminSubmissionsParams): string {
   if (params.work_date) p.append("work_date", params.work_date);
   if (params.date_from) p.append("date_from", params.date_from);
   if (params.date_to) p.append("date_to", params.date_to);
+  if (params.region) p.append("region", params.region);
+  if (params.tester) p.append("tester", params.tester);
+  if (params.workorder_code) p.append("workorder_code", params.workorder_code);
   if (params.status) p.append("status", params.status);
   if (params.shift) p.append("shift", params.shift);
   if (params.file_submission_pending !== undefined)
@@ -79,7 +75,6 @@ function buildQueryString(params: AdminSubmissionsParams): string {
 }
 
 export function useAdminSubmissions(params: AdminSubmissionsParams): AdminSubmissionsResult {
-  const fallbackUsedRef = useRef(false);
   const qs = buildQueryString(params);
 
   const filterRecord: Record<string, string> = {};
@@ -91,42 +86,21 @@ export function useAdminSubmissions(params: AdminSubmissionsParams): AdminSubmis
     queryKey: queryKeys.dailySubmissions(
       Object.keys(filterRecord).length > 0 ? filterRecord : undefined,
     ),
-    queryFn: async () => {
-      fallbackUsedRef.current = false;
-      try {
-        return await apiGet<ApiSubmissionsListResponse>(`/admin/submissions${qs}`);
-      } catch (error) {
-        if (error instanceof ApiError) {
-          if (error.status >= 500) {
-            fallbackUsedRef.current = true;
-            return null;
-          }
-          throw error;
-        }
-        // Network error — fallback
-        fallbackUsedRef.current = true;
-        return null;
+    queryFn: async () => await apiGet<ApiSubmissionsListResponse>(`/admin/submissions${qs}`),
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        return false;
       }
+      return failureCount < 1;
     },
     staleTime: 2 * 60 * 1000,
   });
-
-  if (query.data === null) {
-    return {
-      items: mockSubmissions,
-      pagination: mockPagination,
-      isLoading: false,
-      isError: false,
-      error: null,
-      isFallback: true,
-    };
-  }
 
   const items = (query.data?.items ?? []).map(mapItem);
   const raw = query.data?.pagination;
   const pagination: HookPagination = raw
     ? { page: raw.page, pageSize: raw.page_size, total: raw.total, totalPages: raw.total_pages }
-    : mockPagination;
+    : { page: 1, pageSize: params.page_size ?? 20, total: 0, totalPages: 0 };
 
   return {
     items,
@@ -134,6 +108,5 @@ export function useAdminSubmissions(params: AdminSubmissionsParams): AdminSubmis
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
-    isFallback: fallbackUsedRef.current,
   };
 }

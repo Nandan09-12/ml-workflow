@@ -13,7 +13,7 @@ import { useRejectUser } from "@/lib/hooks/use-reject-user";
 type PendingAction = { userId: string; action: "approve" | "reject"; name: string } | null;
 
 export function PendingUsersPage() {
-  const { items, isLoading, isError, error, isFallback } = usePendingUsers();
+  const { items, isLoading, isError, error } = usePendingUsers();
   const approveMutation = useApproveUser();
   const rejectMutation = useRejectUser();
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -29,12 +29,7 @@ export function PendingUsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker="Approval Queue" title="Pending Users" subtitle="Role requests awaiting admin approval or rejection. Admin requests should feel higher-risk than drive-tester approvals." />
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Live pending users data is temporarily unavailable. Showing cached data.
-        </Alert>
-      )}
-      {isError && !isFallback && (
+      {isError && (
         <Alert title="Error loading pending users" tone="danger">
           {error instanceof Error ? error.message : "Failed to load pending users"}
         </Alert>

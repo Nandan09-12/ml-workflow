@@ -9,25 +9,34 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Panel } from "@/components/ui/panel";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { dashboardMetrics } from "@/lib/mock/data";
 import { formatFileState, formatRegion } from "@/lib/format/labels";
 import { useAdminSubmissions } from "@/lib/hooks/use-admin-submissions";
 import { useAdminWorkorders } from "@/lib/hooks/use-admin-workorders";
 import { useDashboardSummary } from "@/lib/hooks/use-dashboard-summary";
+import { usePendingUsers } from "@/lib/hooks/use-pending-users";
 
 export function DashboardPage() {
   const [workDate, setWorkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [dateFrom, setDateFrom] = useState<string | undefined>();
   const [dateTo, setDateTo] = useState<string | undefined>();
+  const [region, setRegion] = useState<"ALL" | "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA">("ALL");
 
-  const { data: dashboardData, isLoading, isError, error, isFallback } = useDashboardSummary({
+  const regionFilter = region === "ALL" ? undefined : region;
+
+  const { data: dashboardData, isLoading, isError, error } = useDashboardSummary({
     work_date: workDate,
     date_from: dateFrom,
     date_to: dateTo,
   });
 
-  const { items: recentWorkorders } = useAdminWorkorders({ page_size: 4 });
-  const { items: recentSubmissions } = useAdminSubmissions({ page_size: 5 });
+  const { items: recentWorkorders } = useAdminWorkorders({ page_size: 4, region: regionFilter });
+  const { items: recentSubmissions } = useAdminSubmissions({ page_size: 5, region: regionFilter });
+  const { count: pendingUsersCount } = usePendingUsers();
+  const { pagination: filePendingPagination } = useAdminSubmissions({
+    file_submission_pending: true,
+    region: regionFilter,
+    page_size: 1,
+  });
 
   if (isLoading) {
     return (
@@ -37,7 +46,7 @@ export function DashboardPage() {
     );
   }
 
-  if (isError && !isFallback) {
+  if (isError) {
     return (
       <Alert title="Error loading dashboard" tone="danger">
         {error instanceof Error ? error.message : "Failed to load dashboard data"}
@@ -45,46 +54,54 @@ export function DashboardPage() {
     );
   }
 
-  // Build metrics from live data or mock fallback
-  const liveMetrics = dashboardData
-    ? [
-        {
-          label: "Active Workorders",
-          value: dashboardData.active_workorders.toString(),
-          detail: `${dashboardData.completed_workorders} completed`,
-          tone: "brand" as const,
-          href: "/workorders?status=ACTIVE",
-        },
-        {
-          label: "Completed Submissions",
-          value: dashboardData.completed_submissions.toString(),
-          detail: (() => { const total = dashboardData.completed_submissions + dashboardData.ongoing_submissions + dashboardData.no_submission_yet; return total > 0 ? `${Math.round((dashboardData.completed_submissions / total) * 100)}% of daily records` : "0% of daily records"; })(),
-          tone: "success" as const,
-          href: "/daily-submissions?submission_status=COMPLETED",
-        },
-        {
-          label: "Ongoing Submissions",
-          value: dashboardData.ongoing_submissions.toString(),
-          detail: "In progress",
-          tone: "warning" as const,
-          href: "/daily-submissions?submission_status=CHECKED_OUT",
-        },
-        {
-          label: "No Submission Yet",
-          value: dashboardData.no_submission_yet.toString(),
-          detail: "Approved testers only",
-          tone: "danger" as const,
-          href: "/no-submission-yet",
-        },
-      ]
-    : dashboardMetrics;
+  const activeWorkorders = dashboardData?.active_workorders ?? 0;
+  const completedWorkorders = dashboardData?.completed_workorders ?? 0;
+  const completedSubmissions = dashboardData?.completed_submissions ?? 0;
+  const ongoingSubmissions = dashboardData?.ongoing_submissions ?? 0;
+  const noSubmissionYet = dashboardData?.no_submission_yet ?? 0;
+  const completionDenominator = completedSubmissions + ongoingSubmissions + noSubmissionYet;
+
+  const liveMetrics = [
+    {
+      label: "Active Workorders",
+      value: activeWorkorders.toString(),
+      detail: `${completedWorkorders} completed`,
+      tone: "brand" as const,
+      href: regionFilter
+        ? `/workorders?status=ACTIVE&region=${regionFilter}`
+        : "/workorders?status=ACTIVE",
+    },
+    {
+      label: "Completed Submissions",
+      value: completedSubmissions.toString(),
+      detail:
+        completionDenominator > 0
+          ? `${Math.round((completedSubmissions / completionDenominator) * 100)}% of daily records`
+          : "0% of daily records",
+      tone: "success" as const,
+      href: regionFilter
+        ? `/daily-submissions?submission_status=COMPLETED&region=${regionFilter}`
+        : "/daily-submissions?submission_status=COMPLETED",
+    },
+    {
+      label: "Ongoing Submissions",
+      value: ongoingSubmissions.toString(),
+      detail: "In progress",
+      tone: "warning" as const,
+      href: regionFilter
+        ? `/daily-submissions?submission_status=CHECKED_OUT&region=${regionFilter}`
+        : "/daily-submissions?submission_status=CHECKED_OUT",
+    },
+    {
+      label: "No Submission Yet",
+      value: noSubmissionYet.toString(),
+      detail: "Approved testers only",
+      tone: "danger" as const,
+      href: "/no-submission-yet",
+    },
+  ];
   return (
     <div className="space-y-6">
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Dashboard data is cached. Live updates may not be available at this time.
-        </Alert>
-      )}
       <PageHeader
         kicker="Today"
         title="Operations Summary"
@@ -103,16 +120,26 @@ export function DashboardPage() {
             </label>
             <label className="grid min-w-40 gap-1 text-xs font-bold uppercase tracking-[0.12em] text-neutral">
               <span>Region</span>
-              <select className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink">
-                <option>All regions</option>
-                <option>NE-UP</option>
-                <option>Central</option>
-                <option>South/Florida</option>
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value as "ALL" | "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA")}
+                data-testid="region-filter"
+                className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink"
+              >
+                <option value="ALL">All regions</option>
+                <option value="NE_UP">NE-UP</option>
+                <option value="CENTRAL">Central</option>
+                <option value="SOUTH_FLORIDA">South/Florida</option>
               </select>
             </label>
           </div>
         }
       />
+      {regionFilter ? (
+        <Alert title="Region filter applied" tone="info">
+          Workorder and submission widgets are filtered to {formatRegion(regionFilter)}.
+        </Alert>
+      ) : null}
       <div className="grid gap-4 xl:grid-cols-4">
         {liveMetrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
@@ -125,7 +152,12 @@ export function DashboardPage() {
               <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Workorders</p>
               <h2 className="mt-1 text-xl font-semibold text-ink">Progress</h2>
             </div>
-            <Link className="text-sm font-bold text-brand" href="/workorders">View all</Link>
+            <Link
+              className="text-sm font-bold text-brand"
+              href={regionFilter ? `/workorders?region=${regionFilter}` : "/workorders"}
+            >
+              View all
+            </Link>
           </div>
           <div className="grid gap-3">
             {recentWorkorders.map((workorder) => (
@@ -150,18 +182,25 @@ export function DashboardPage() {
             <h2 className="mt-1 text-xl font-semibold text-ink">Admin Queue</h2>
           </div>
           <div className="grid gap-3">
-            <Link href="/daily-submissions?file_submission_pending=true" className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">6</span>
+            <Link
+              href={
+                regionFilter
+                  ? `/daily-submissions?file_submission_pending=true&region=${regionFilter}`
+                  : "/daily-submissions?file_submission_pending=true"
+              }
+              className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand"
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{filePendingPagination.total}</span>
               <strong className="mt-3 block text-sm font-semibold text-ink">File Pending</strong>
               <p className="mt-1 text-sm text-neutral">Checked-out submissions without an active CSV or XLSX closeout file.</p>
             </Link>
             <Link href="/users/pending" className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">4</span>
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{pendingUsersCount}</span>
               <strong className="mt-3 block text-sm font-semibold text-ink">Pending Users</strong>
               <p className="mt-1 text-sm text-neutral">Role requests awaiting admin approval or rejection.</p>
             </Link>
             <Link href="/no-submission-yet" className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{dashboardData?.no_submission_yet ?? 7}</span>
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{noSubmissionYet}</span>
               <strong className="mt-3 block text-sm font-semibold text-ink">No Submission Yet</strong>
               <p className="mt-1 text-sm text-neutral">Approved drive testers with no daily submission record for the selected date.</p>
             </Link>
@@ -174,7 +213,12 @@ export function DashboardPage() {
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-brand">Daily Submissions</p>
             <h2 className="mt-1 text-xl font-semibold text-ink">Recent Activity</h2>
           </div>
-          <Link className="text-sm font-bold text-brand" href="/daily-submissions">Open table</Link>
+          <Link
+            className="text-sm font-bold text-brand"
+            href={regionFilter ? `/daily-submissions?region=${regionFilter}` : "/daily-submissions"}
+          >
+            Open table
+          </Link>
         </div>
         <DataTable headers={["Work Date", "Tester", "Workorder", "Shift", "Status", "File"]}>
           {recentSubmissions.map((submission) => (

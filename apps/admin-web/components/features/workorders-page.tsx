@@ -37,7 +37,7 @@ export function WorkordersPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const { items, pagination, isLoading, isError, error, isFallback } = useAdminWorkorders({
+  const { items, pagination, isLoading, isError, error } = useAdminWorkorders({
     workorder_code: filters.workorderCode || undefined,
     region: filters.region !== "ALL" ? filters.region : undefined,
     status: filters.status !== "ALL" ? filters.status : undefined,
@@ -73,12 +73,7 @@ export function WorkordersPage() {
   return (
     <div className="space-y-6">
       <PageHeader kicker="Parent Records" title="Workorders" subtitle="Aggregate progress view across all child daily submissions, with guardrails for admin edits and reconciliation." />
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Live workorders data is temporarily unavailable. Showing cached data.
-        </Alert>
-      )}
-      {isError && !isFallback && (
+      {isError && (
         <Alert title="Error loading workorders" tone="danger">
           {error instanceof Error ? error.message : "Failed to load workorders"}
         </Alert>

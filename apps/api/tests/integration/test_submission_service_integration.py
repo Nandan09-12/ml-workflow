@@ -822,6 +822,80 @@ async def test_submission_admin_list_supports_file_submission_pending_filter(
     assert items[0].file_submission_pending is True
 
 
+async def test_submission_admin_list_supports_region_workorder_code_and_tester_filters(
+    integration_session: AsyncSession,
+) -> None:
+    admin = build_user(
+        email="admin-filter2@example.com",
+        requested_role=RequestedRole.ADMIN,
+        approved_role=RequestedRole.ADMIN,
+        account_status=AccountStatus.APPROVED,
+    )
+    target_owner = build_user(
+        email="match.tester@example.com",
+        full_name="Matched Tester",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    other_owner = build_user(
+        email="other.tester@example.com",
+        full_name="Other Tester",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    target_workorder = build_workorder(
+        owner=target_owner,
+        workorder_code="WO-ALPHA-77",
+        region=Region.SOUTH_FLORIDA,
+    )
+    other_workorder = build_workorder(
+        owner=other_owner,
+        workorder_code="WO-BETA-22",
+        region=Region.NE_UP,
+    )
+    target_submission = build_submission(
+        owner=target_owner,
+        workorder=target_workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+    )
+    other_submission = build_submission(
+        owner=other_owner,
+        workorder=other_workorder,
+        work_date=date(2026, 4, 14),
+        status=SubmissionStatus.CHECKED_OUT,
+    )
+
+    integration_session.add_all(
+        [
+            admin,
+            target_owner,
+            other_owner,
+            target_workorder,
+            other_workorder,
+            target_submission,
+            other_submission,
+        ]
+    )
+    await integration_session.commit()
+
+    service = SubmissionService(repository=SubmissionRepository(integration_session))
+    items, total = await service.list_admin_submissions(
+        auth_payload(admin),
+        region=Region.SOUTH_FLORIDA,
+        workorder_code="alpha",
+        tester="match.tester@example.com",
+        page=1,
+        page_size=20,
+    )
+
+    assert total == 1
+    assert len(items) == 1
+    assert items[0].id == target_submission.id
+
+
 async def test_submission_update_requires_matching_version(
     integration_session: AsyncSession,
 ) -> None:

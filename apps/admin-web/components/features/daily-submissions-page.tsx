@@ -40,8 +40,11 @@ export function DailySubmissionsPage() {
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  const { items, pagination, isLoading, isError, error, isFallback } = useAdminSubmissions({
+  const { items, pagination, isLoading, isError, error } = useAdminSubmissions({
     work_date: filters.workDate || undefined,
+    region: filters.region !== "ALL" ? filters.region : undefined,
+    tester: filters.tester || undefined,
+    workorder_code: filters.workorderCode || undefined,
     status: filters.submissionStatus !== "ALL" ? filters.submissionStatus : undefined,
     shift: filters.shift !== "ALL" ? filters.shift : undefined,
     file_submission_pending:
@@ -117,12 +120,7 @@ export function DailySubmissionsPage() {
           {exportMutation.error instanceof Error ? exportMutation.error.message : "Failed to export submissions"}
         </Alert>
       )}
-      {isFallback && (
-        <Alert title="Using cached data" tone="info">
-          Live submissions data is temporarily unavailable. Showing cached data.
-        </Alert>
-      )}
-      {isError && !isFallback && (
+      {isError && (
         <Alert title="Error loading submissions" tone="danger">
           {error instanceof Error ? error.message : "Failed to load submissions"}
         </Alert>

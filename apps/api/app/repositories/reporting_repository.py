@@ -16,7 +16,7 @@ from app.models.submission import Submission
 from app.models.submission_attachment import SubmissionAttachment
 from app.models.workorder import Workorder
 from app.repositories.base import BaseRepository
-from app.repositories.submission_repository import SubmissionRepository
+from app.repositories.submission_filters import apply_admin_submission_filters
 
 
 class ReportingRepository(BaseRepository):
@@ -101,7 +101,7 @@ class ReportingRepository(BaseRepository):
     ) -> list[Submission]:
         items_query = select(Submission)
         count_query = select(func.count(Submission.id))
-        items_query, _ = SubmissionRepository._apply_admin_filters(  # noqa: SLF001
+        items_query, _ = apply_admin_submission_filters(
             items_query,
             count_query,
             work_date=work_date,
@@ -110,6 +110,9 @@ class ReportingRepository(BaseRepository):
             status=status,
             shift=shift,
             workorder_status=None,
+            region=None,
+            workorder_code=None,
+            tester=None,
             owner_user_id=owner_user_id,
             ticket_number=ticket_number,
             file_submission_pending=file_submission_pending,

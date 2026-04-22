@@ -139,3 +139,65 @@ async def test_reporting_service_export_csv_respects_file_submission_pending_fil
     assert rows[0]["file_submission_pending"] == "true"
     assert rows[0]["workorder_code"] == "WO-PENDING"
 
+
+async def test_reporting_service_export_csv_supports_no_filters_and_status_filter(
+    integration_session: AsyncSession,
+) -> None:
+    repo = ReportingRepository(integration_session)
+    service = ReportingService(repository=repo)
+    selected_date = date(2026, 4, 14)
+    admin = build_user(
+        email="admin3@example.com",
+        requested_role=RequestedRole.ADMIN,
+        approved_role=RequestedRole.ADMIN,
+        account_status=AccountStatus.APPROVED,
+    )
+    owner = build_user(
+        email="owner3@example.com",
+        requested_role=RequestedRole.DRIVE_TESTER,
+        approved_role=RequestedRole.DRIVE_TESTER,
+        account_status=AccountStatus.APPROVED,
+    )
+    completed_workorder = build_workorder(owner=owner, workorder_code="WO-COMP")
+    in_progress_workorder = build_workorder(owner=owner, workorder_code="WO-IP")
+    completed_submission = build_submission(
+        owner=owner,
+        workorder=completed_workorder,
+        work_date=selected_date,
+        status=SubmissionStatus.COMPLETED,
+        ticket_number="TKT-COMP",
+    )
+    in_progress_submission = build_submission(
+        owner=owner,
+        workorder=in_progress_workorder,
+        work_date=selected_date,
+        status=SubmissionStatus.IN_PROGRESS,
+        ticket_number="TKT-IP",
+    )
+
+    integration_session.add_all(
+        [
+            admin,
+            owner,
+            completed_workorder,
+            in_progress_workorder,
+            completed_submission,
+            in_progress_submission,
+        ]
+    )
+    await integration_session.commit()
+
+    unfiltered_csv = await service.export_submissions_csv(auth_payload(admin))
+    unfiltered_rows = list(csv.DictReader(io.StringIO(unfiltered_csv)))
+    completed_csv = await service.export_submissions_csv(
+        auth_payload(admin),
+        status=SubmissionStatus.COMPLETED,
+    )
+    completed_rows = list(csv.DictReader(io.StringIO(completed_csv)))
+
+    assert len(unfiltered_rows) >= 2
+    assert {row["ticket_number"] for row in unfiltered_rows} >= {"TKT-COMP", "TKT-IP"}
+    assert len(completed_rows) == 1
+    assert completed_rows[0]["ticket_number"] == "TKT-COMP"
+    assert completed_rows[0]["status"] == "COMPLETED"
+
