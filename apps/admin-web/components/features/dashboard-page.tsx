@@ -179,13 +179,13 @@ export function DashboardPage() {
         <DataTable headers={["Work Date", "Tester", "Workorder", "Shift", "Status", "File"]}>
           {recentSubmissions.map((submission) => (
             <tr key={submission.id}>
-              <td>{submission.workDate}</td>
+              <td className="whitespace-nowrap">{submission.workDate}</td>
               <td>
-                <div className="font-semibold text-ink">{submission.testerName}</div>
-                <div className="text-xs text-neutral">{submission.testerEmail}</div>
+                <div className="max-w-48 truncate font-semibold text-ink" title={submission.testerName}>{submission.testerName}</div>
+                <div className="max-w-56 truncate text-xs text-neutral" title={submission.testerEmail}>{submission.testerEmail}</div>
               </td>
-              <td>{submission.workorderCode}</td>
-              <td>{submission.shift}</td>
+              <td className="max-w-40 truncate font-mono text-xs sm:text-sm" title={submission.workorderCode}>{submission.workorderCode}</td>
+              <td className="whitespace-nowrap">{submission.shift}</td>
               <td><StatusBadge value={submission.status} /></td>
               <td><StatusBadge value={submission.fileState} /></td>
             </tr>

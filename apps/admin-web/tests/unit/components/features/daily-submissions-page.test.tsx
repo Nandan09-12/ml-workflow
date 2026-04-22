@@ -4,8 +4,18 @@ import { DailySubmissionsPage } from "@/components/features/daily-submissions-pa
 import { submissions } from "@/lib/mock/data";
 
 const mockUseAdminSubmissions = vi.fn();
+const mockMutate = vi.fn();
 vi.mock("@/lib/hooks/use-admin-submissions", () => ({
   useAdminSubmissions: (...args: unknown[]) => mockUseAdminSubmissions(...args),
+}));
+
+vi.mock("@/lib/hooks/use-submissions-export", () => ({
+  useSubmissionsExport: () => ({
+    mutate: mockMutate,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 const defaultHookResult = {
@@ -72,5 +82,28 @@ describe("DailySubmissionsPage", () => {
 
     expect(screen.getByText("No daily submissions found")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("exports CSV using only backend-supported active filters", () => {
+    globalThis.__mockPathname = "/daily-submissions";
+    globalThis.__mockSearchParams = [
+      "work_date=2026-04-22",
+      "submission_status=COMPLETED",
+      "shift=AM",
+      "file_submission_pending=true",
+      "workorder_code=WO-NE-401",
+      "tester=alex@example.com",
+    ].join("&");
+
+    render(<DailySubmissionsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+
+    expect(mockMutate).toHaveBeenCalledWith({
+      work_date: "2026-04-22",
+      status: "COMPLETED",
+      shift: "AM",
+      file_submission_pending: true,
+    });
   });
 });

@@ -53,11 +53,11 @@ export function NoSubmissionYetPage() {
             <DataTable headers={["Tester", "Email", "Approved Role", "Last Submission", "Last Workorder"]}>
               {items.map((user) => (
                 <tr key={user.id}>
-                  <td className="font-semibold text-ink">{user.fullName}</td>
-                  <td>{user.email}</td>
+                  <td className="max-w-48 truncate font-semibold text-ink" title={user.fullName}>{user.fullName}</td>
+                  <td className="max-w-56 truncate" title={user.email}>{user.email}</td>
                   <td><StatusBadge value={user.approvedRole} /></td>
-                  <td>{user.lastSubmissionDate ?? "Unknown"}</td>
-                  <td>{user.lastWorkorderCode ?? "Unknown"}</td>
+                  <td className="whitespace-nowrap">{user.lastSubmissionDate ?? "Unknown"}</td>
+                  <td className="max-w-40 truncate font-mono text-xs sm:text-sm" title={user.lastWorkorderCode ?? "Unknown"}>{user.lastWorkorderCode ?? "Unknown"}</td>
                 </tr>
               ))}
             </DataTable>

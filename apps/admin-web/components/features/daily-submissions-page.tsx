@@ -23,6 +23,7 @@ import {
 } from "@/lib/filters/daily-submissions";
 import { formatRegion } from "@/lib/format/labels";
 import { useAdminSubmissions } from "@/lib/hooks/use-admin-submissions";
+import { useSubmissionsExport } from "@/lib/hooks/use-submissions-export";
 
 export function DailySubmissionsPage() {
   const pathname = usePathname();
@@ -50,6 +51,19 @@ export function DailySubmissionsPage() {
     page: filters.page,
     page_size: filters.pageSize,
   });
+  const exportMutation = useSubmissionsExport();
+
+  function handleExport() {
+    exportMutation.mutate({
+      work_date: filters.workDate || undefined,
+      status: filters.submissionStatus !== "ALL" ? filters.submissionStatus : undefined,
+      shift: filters.shift !== "ALL" ? filters.shift : undefined,
+      file_submission_pending:
+        filters.fileSubmissionPending !== "ALL"
+          ? filters.fileSubmissionPending === "true"
+          : undefined,
+    });
+  }
 
   function syncFilters(nextFilters: DailySubmissionsFilterState) {
     setFilters(nextFilters);
@@ -88,9 +102,21 @@ export function DailySubmissionsPage() {
         title="Daily Submissions"
         subtitle="Main operations table for daily records, file state follow-up, and drill-down into admin detail views."
         actions={
-          <button type="button" className="rounded-panel border border-line bg-panel px-4 py-2 text-sm font-semibold text-slate-700">Export CSV</button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exportMutation.isPending}
+            className="rounded-panel border border-line bg-panel px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+          >
+            {exportMutation.isPending ? "Exporting…" : "Export CSV"}
+          </button>
         }
       />
+      {exportMutation.isError && (
+        <Alert title="Export failed" tone="danger">
+          {exportMutation.error instanceof Error ? exportMutation.error.message : "Failed to export submissions"}
+        </Alert>
+      )}
       {isFallback && (
         <Alert title="Using cached data" tone="info">
           Live submissions data is temporarily unavailable. Showing cached data.
@@ -189,20 +215,20 @@ export function DailySubmissionsPage() {
             <DataTable headers={["Work Date", "Tester", "Workorder", "Region", "Shift", "Completed", "Skipped", "Submission", "Workorder", "File", ""]}>
               {items.map((submission) => (
                 <tr key={submission.id}>
-                  <td>{submission.workDate}</td>
+                  <td className="whitespace-nowrap">{submission.workDate}</td>
                   <td>
-                    <div className="font-semibold text-ink">{submission.testerName}</div>
-                    <div className="text-xs text-neutral">{submission.testerEmail}</div>
+                    <div className="max-w-48 truncate font-semibold text-ink" title={submission.testerName}>{submission.testerName}</div>
+                    <div className="max-w-56 truncate text-xs text-neutral" title={submission.testerEmail}>{submission.testerEmail}</div>
                   </td>
-                  <td>{submission.workorderCode}</td>
-                  <td>{formatRegion(submission.region)}</td>
-                  <td>{submission.shift}</td>
+                  <td className="max-w-40 truncate font-mono text-xs sm:text-sm" title={submission.workorderCode}>{submission.workorderCode}</td>
+                  <td className="whitespace-nowrap">{formatRegion(submission.region)}</td>
+                  <td className="whitespace-nowrap">{submission.shift}</td>
                   <td className="text-right">{submission.completedGrids}</td>
                   <td className="text-right">{submission.skippedGrids}</td>
                   <td><StatusBadge value={submission.status} /></td>
                   <td><StatusBadge value={submission.workorderStatus} /></td>
                   <td><StatusBadge value={submission.fileState} /></td>
-                  <td><Link href={`/daily-submissions/${submission.id}`} className="text-sm font-bold text-brand">Open</Link></td>
+                  <td className="whitespace-nowrap"><Link href={`/daily-submissions/${submission.id}`} className="text-sm font-bold text-brand">Open</Link></td>
                 </tr>
               ))}
             </DataTable>
