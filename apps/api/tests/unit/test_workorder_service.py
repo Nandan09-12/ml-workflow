@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
+from zoneinfo import ZoneInfo
 
 from app.core.enums import (
     AccountStatus,
@@ -26,6 +27,18 @@ from app.models.submission_audit_log import SubmissionAuditLog
 from app.models.workorder import Workorder
 from app.schemas.workorders import StartDriveRequest, UpdateWorkorderRequest
 from app.services.workorder_service import WorkorderService
+
+# ---------------------------------------------------------------------------
+# Timezone-aware "today" helper — matches _today_for_region(NE_UP/SOUTH_FLORIDA)
+# Using UTC _today() breaks at midnight UTC when Eastern is still the
+# previous day, causing "work_date cannot be in the future" failures in CI.
+# ---------------------------------------------------------------------------
+_EASTERN = ZoneInfo("America/New_York")
+
+
+def _today() -> date:
+    return datetime.now(_EASTERN).date()
+
 
 # ---------------------------------------------------------------------------
 # Fake repository
@@ -217,7 +230,7 @@ def _submission(
         workorder_id=workorder_id,
         submitter_name_snapshot="Snapshot Name",
         submitter_email_snapshot="snapshot@example.com",
-        work_date=work_date or date.today(),
+        work_date=work_date or _today(),
         shift=Shift.AM,
         team_number=None,
         ticket_number=None,
@@ -278,7 +291,7 @@ async def test_start_drive_requires_approved_account() -> None:
                 workorder_code="WO-001",
                 region=Region.NE_UP,
                 total_grids=10,
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -301,7 +314,7 @@ async def test_start_drive_creates_new_workorder_when_none_exists() -> None:
             workorder_code="WO-001",
             region=Region.NE_UP,
             total_grids=10,
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -324,7 +337,7 @@ async def test_start_drive_requires_region_when_creating_new_workorder() -> None
                 workorder_code="WO-MISSING-REGION",
                 # region intentionally omitted
                 total_grids=10,
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -343,7 +356,7 @@ async def test_start_drive_requires_total_grids_when_creating_new_workorder() ->
                 workorder_code="WO-MISSING-GRIDS",
                 region=Region.NE_UP,
                 # total_grids intentionally omitted
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -361,7 +374,7 @@ async def test_start_drive_creates_submission_as_in_progress() -> None:
             workorder_code="WO-001",
             region=Region.NE_UP,
             total_grids=10,
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -380,7 +393,7 @@ async def test_start_drive_creates_audit_log() -> None:
             workorder_code="WO-001",
             region=Region.NE_UP,
             total_grids=10,
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -398,7 +411,7 @@ async def test_start_drive_is_atomic() -> None:
             workorder_code="WO-001",
             region=Region.NE_UP,
             total_grids=10,
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -421,7 +434,7 @@ async def test_start_drive_reuses_active_workorder() -> None:
         _auth(repo.approved_user),
         StartDriveRequest(
             workorder_code="WO-EXIST",
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -442,7 +455,7 @@ async def test_start_drive_rejects_completed_workorder() -> None:
             _auth(repo.approved_user),
             StartDriveRequest(
                 workorder_code="WO-DONE",
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -463,7 +476,7 @@ async def test_start_drive_rejects_region_mismatch_when_attaching() -> None:
                 workorder_code="WO-REG",
                 region=Region.NE_UP,  # mismatch
                 total_grids=5,
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -483,7 +496,7 @@ async def test_start_drive_rejects_total_grids_mismatch_when_attaching() -> None
             StartDriveRequest(
                 workorder_code="WO-GRIDS",
                 total_grids=99,  # mismatch
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
@@ -502,7 +515,7 @@ async def test_start_drive_allows_omit_region_and_grids_when_attaching() -> None
         StartDriveRequest(
             workorder_code="WO-ATTACH",
             # region and total_grids omitted — should be fine when attaching
-            work_date=date.today(),
+            work_date=_today(),
             shift=Shift.AM,
         ),
     )
@@ -516,7 +529,7 @@ async def test_start_drive_rejects_duplicate_workorder_date_submission() -> None
     service = WorkorderService(repository=repo)
     existing = _workorder("WO-DUP")
     repo.workorders.append(existing)
-    dupe_sub = _submission(repo.approved_user.id, existing.id, work_date=date.today())
+    dupe_sub = _submission(repo.approved_user.id, existing.id, work_date=_today())
     repo.submissions.append(dupe_sub)
 
     with pytest.raises(AppError) as exc:
@@ -524,7 +537,7 @@ async def test_start_drive_rejects_duplicate_workorder_date_submission() -> None
             _auth(repo.approved_user),
             StartDriveRequest(
                 workorder_code="WO-DUP",
-                work_date=date.today(),
+                work_date=_today(),
                 shift=Shift.AM,
             ),
         )
