@@ -1,3 +1,23 @@
+.git
+.github
+.next
+.pytest_cache
+.ruff_cache
+.turbo
+.venv
+**/.env
+**/.env.local
+**/.env.*.local
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/node_modules
+**/.next
+**/coverage
+**/dist
+**/build
+**/playwright-report
+**/test-results
 # Git
 .git
 .gitignore

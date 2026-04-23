@@ -64,6 +64,33 @@ ml-workflow/
 docker compose up --build
 ```
 
+Docker source of truth:
+
+- API image: `apps/api/Dockerfile`
+- Admin web image: `apps/admin-web/Dockerfile`
+
+This shared local stack starts:
+
+- Postgres on `http://localhost:5432`
+- API on `http://localhost:8000`
+- Admin web on `http://localhost:3000`
+
+Before first run, create local env files:
+
+```bash
+copy apps\api\.env.example apps\api\.env
+copy apps\admin-web\.env.example apps\admin-web\.env.local
+```
+
+On macOS/Linux:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/admin-web/.env.example apps/admin-web/.env.local
+```
+
+Teammate setup instructions live in [docs/DOCKER_SETUP.md](docs/DOCKER_SETUP.md).
+
 Environment template for API settings:
 
 ```bash
