@@ -7,7 +7,13 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "mobile:backend": "docker compose up -d db app",
+    "mobile:ios": "pnpm --filter @ml-workflow/mobile ios",
+    "mobile:ios:install": "pnpm --filter @ml-workflow/mobile ios:install",
+    "mobile:android": "pnpm --filter @ml-workflow/mobile android",
+    "mobile:native": "pnpm --filter @ml-workflow/mobile dev:native",
+    "mobile:web": "pnpm --filter @ml-workflow/mobile web"
   },
   "devDependencies": {
     "turbo": "^2.1.3",

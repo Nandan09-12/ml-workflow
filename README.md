@@ -68,6 +68,7 @@ Docker source of truth:
 
 - API image: `apps/api/Dockerfile`
 - Admin web image: `apps/admin-web/Dockerfile`
+- Mobile Expo dev image: `apps/mobile/Dockerfile`
 
 This shared local stack starts:
 
@@ -90,6 +91,26 @@ cp apps/admin-web/.env.example apps/admin-web/.env.local
 ```
 
 Teammate setup instructions live in [docs/DOCKER_SETUP.md](docs/DOCKER_SETUP.md).
+
+Optional mobile dev server in Docker:
+
+```bash
+docker compose --profile mobile up --build mobile
+```
+
+This starts the Expo dev server in a separate optional profile without changing the default API/admin stack.
+The Dockerized Expo server uses port `8082` by default.
+
+Native simulator workflow without Expo Go:
+
+```bash
+pnpm mobile:backend
+pnpm mobile:ios
+pnpm mobile:android
+```
+
+This keeps the backend in Docker and installs the mobile app directly into the iOS Simulator and Android Emulator.
+After the first install, use `pnpm mobile:native` for the native dev server and `pnpm mobile:web` for the browser in parallel.
 
 Environment template for API settings:
 
@@ -129,4 +150,3 @@ GET http://localhost:8000/api/v1/health
 - integration tests run against one Postgres instance and isolate each test with a temporary schema
 - this setup does not change the normal API dev workflow in `docker-compose.yml`
 - backend testing strategy and scenario sources are documented in `docs/TESTING.md`
-

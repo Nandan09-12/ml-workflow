@@ -9,6 +9,7 @@ This repo uses separate containers for separate services:
 - Postgres database
 - FastAPI backend (`apps/api`)
 - Next.js admin web (`apps/admin-web`)
+- Optional Expo mobile dev server (`apps/mobile`) via Docker Compose profile
 
 They run together through one shared Docker Compose stack.
 
@@ -16,8 +17,7 @@ Docker source of truth in this repo:
 
 - API image definition: `apps/api/Dockerfile`
 - Admin web image definition: `apps/admin-web/Dockerfile`
-
-Mobile is intentionally not part of this setup guide.
+- Mobile image definition: `apps/mobile/Dockerfile`
 
 ## Prerequisites
 
@@ -46,6 +46,7 @@ Windows:
 ```bash
 copy apps\api\.env.example apps\api\.env
 copy apps\admin-web\.env.example apps\admin-web\.env.local
+copy apps\mobile\.env.example apps\mobile\.env
 ```
 
 macOS/Linux:
@@ -53,6 +54,7 @@ macOS/Linux:
 ```bash
 cp apps/api/.env.example apps/api/.env
 cp apps/admin-web/.env.example apps/admin-web/.env.local
+cp apps/mobile/.env.example apps/mobile/.env
 ```
 
 Never commit these local env files.
@@ -121,6 +123,107 @@ This starts:
 - API on `localhost:8000`
 - Admin web on `localhost:3000`
 
+## Start The Mobile Expo Dev Server In Docker
+
+The mobile app runs as an optional Compose profile so it does not change the default `docker compose up --build` flow.
+
+Start it with:
+
+```bash
+docker compose --profile mobile up --build mobile
+```
+
+This will also start the API dependency automatically.
+
+Exposed mobile ports:
+
+- Expo / Metro on `localhost:8082` by default
+- Expo helper ports on `localhost:19000`, `localhost:19001`, and `localhost:19002`
+
+The Dockerized mobile service defaults to Expo localhost mode for simulator and emulator testing.
+
+Use it like this:
+
+```bash
+docker compose up -d db app
+docker compose --profile mobile up --build mobile
+```
+
+Then test the same frontend in parallel:
+
+- Web: open `http://localhost:8082`
+- iOS Simulator: open Expo Go and load `exp://127.0.0.1:8082`
+- Android Emulator: run `adb reverse tcp:8082 tcp:8082`, then open Expo Go and load `exp://127.0.0.1:8082`
+
+The local mobile env already uses `EXPO_PUBLIC_API_BASE_URL_ANDROID=http://10.0.2.2:8000`, so Android API traffic can still reach the Dockerized backend without extra reverse rules.
+
+If `8082` is already in use on your machine, override it temporarily:
+
+```bash
+EXPO_DEV_PORT=8083 docker compose --profile mobile up --build mobile
+```
+
+If you want to test on a physical phone over Wi-Fi instead of simulators, override back to LAN mode:
+
+```bash
+EXPO_DEV_HOST=lan docker compose --profile mobile up --build mobile
+```
+
+## Run The Mobile App Without Expo Go
+
+If you want the app installed directly in the iOS Simulator or Android Emulator, do not use the Dockerized mobile profile for that step.
+Keep Docker for the backend and run the mobile native build on your host machine instead.
+
+From repo root:
+
+```bash
+pnpm mobile:backend
+pnpm mobile:ios
+pnpm mobile:android
+```
+
+This gives you:
+
+- API + DB in Docker
+- iOS Simulator running your installed app
+- Android Emulator running your installed app
+
+After the first install, use this daily parallel workflow:
+
+```bash
+pnpm mobile:native
+pnpm mobile:web
+```
+
+- `pnpm mobile:native` starts Metro in dev-client mode for the installed simulator apps and keeps Expo Go out of the flow
+- `pnpm mobile:web` runs the same `apps/mobile` codebase in the browser
+
+If `expo run:ios` hits a Metro port-detection issue on your machine, use:
+
+```bash
+pnpm mobile:native
+pnpm mobile:ios:install
+```
+
+This starts Metro separately on a fixed port and installs the iOS app without letting Expo re-manage the bundler.
+
+The first native build may generate local `apps/mobile/ios` and `apps/mobile/android` folders.
+They are intentionally gitignored in this repo because they are local native build outputs.
+
+Use these mobile env values for the host-native workflow:
+
+```dotenv
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
+EXPO_PUBLIC_API_BASE_URL_IOS=http://127.0.0.1:8000
+EXPO_PUBLIC_API_BASE_URL_ANDROID=http://10.0.2.2:8000
+```
+
+Notes:
+
+- iOS Simulator reaches the host API at `127.0.0.1`
+- Android Emulator reaches the host API at `10.0.2.2`
+- `REACT_NATIVE_PACKAGER_HOSTNAME` is only needed when Metro itself is running in Docker or when testing on a physical device over LAN
+
 ## Start Only Part Of The Stack
 
 API + DB only:
@@ -162,6 +265,7 @@ View logs:
 docker compose logs -f app
 docker compose logs -f admin-web
 docker compose logs -f db
+docker compose --profile mobile logs -f mobile
 ```
 
 Reset local database volume:
@@ -247,6 +351,6 @@ This repo now ignores local env files, virtual environments, node_modules, and b
 ## Recommended Team Workflow
 
 1. Use Docker Compose for API + DB + admin web locally.
-2. Keep mobile Docker work separate.
+2. Use the optional `mobile` profile when you want Expo running in Docker.
 3. Default to local Docker Postgres for most development.
 4. Use Supabase-backed DB only when you intentionally need hosted-data parity.
