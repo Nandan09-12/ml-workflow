@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -47,6 +47,11 @@ export default function LoginScreen() {
 
   const onSubmit = async (values: LoginForm) => {
     const result = await signInWithPassword(values);
+
+    if (result === "EMAIL_NOT_CONFIRMED") {
+      Alert.alert("Verify your email", "Please verify your email before logging in.");
+      return;
+    }
 
     if (result === "APPROVED") {
       router.replace("/(tabs)/projects");
