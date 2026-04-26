@@ -79,7 +79,7 @@ class SupabaseJWTVerifier:
             return self._cached_jwks
 
         assert self._settings.resolved_supabase_jwks_url is not None
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=25.0) as client:
             response = await client.get(
                 self._settings.resolved_supabase_jwks_url
             )
@@ -88,10 +88,16 @@ class SupabaseJWTVerifier:
             return self._cached_jwks
 
 
+_jwt_verifier: SupabaseJWTVerifier | None = None
+
+
 def get_jwt_verifier(
     settings: Settings = Depends(get_settings),
 ) -> SupabaseJWTVerifier:
-    return SupabaseJWTVerifier(settings=settings)
+    global _jwt_verifier
+    if _jwt_verifier is None:
+        _jwt_verifier = SupabaseJWTVerifier(settings=settings)
+    return _jwt_verifier
 
 
 async def get_access_token(

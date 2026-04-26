@@ -67,8 +67,8 @@ services:
       - ./apps/mobile/.env
     environment:
       EXPO_DEVTOOLS_LISTEN_ADDRESS: 0.0.0.0
-      EXPO_DEV_HOST: ${EXPO_DEV_HOST:-localhost}
-      EXPO_DEV_PORT: ${EXPO_DEV_PORT:-8082}
+      EXPO_DEV_HOST: lan
+      EXPO_DEV_PORT: "8082"
     volumes:
       - ./apps/mobile:/app/apps/mobile
       - ./packages/api-client:/app/packages/api-client
