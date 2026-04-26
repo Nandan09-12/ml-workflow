@@ -68,7 +68,7 @@ export function createApiClient(options: CreateApiClientOptions) {
     const token = await options.getAccessToken?.();
     const headers = new Headers(init.headers);
     const controller = new AbortController();
-    const timeoutMs = options.requestTimeoutMs ?? 15000;
+    const timeoutMs = options.requestTimeoutMs ?? 30000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {

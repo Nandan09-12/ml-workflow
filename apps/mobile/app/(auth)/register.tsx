@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -37,6 +37,11 @@ const registerSchema = z
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
+type RegistrationModalState =
+  | { kind: "EMAIL_ALREADY_USED"; email: string }
+  | { kind: "VERIFY_EMAIL_REQUIRED"; email: string }
+  | null;
+
 export default function RegisterScreen() {
   const { clearError, errorMessage, isSubmitting, signUpWithPassword } = useAuth();
   const {
@@ -57,13 +62,21 @@ export default function RegisterScreen() {
   });
 
   const password = watch("password");
-  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
-  const isConfirmationNotice =
-    errorMessage === "Account created. Check your email to confirm it, then log in.";
+  const [registrationModal, setRegistrationModal] = useState<RegistrationModalState>(null);
 
   useEffect(() => {
     clearError();
   }, [clearError]);
+
+  const closeRegistrationModal = () => {
+    setRegistrationModal(null);
+  };
+
+  const goToLogin = () => {
+    clearError();
+    setRegistrationModal(null);
+    router.replace("/(auth)/login");
+  };
 
   const onSubmit = async (values: RegisterForm) => {
     const payload = {
@@ -73,17 +86,32 @@ export default function RegisterScreen() {
       password: values.password,
     };
 
-    setSubmittedEmail(payload.email);
-    const didSignUp = await signUpWithPassword(payload);
+    const signUpResult = await signUpWithPassword(payload);
 
-    if (didSignUp) {
+    if (signUpResult === true) {
+      setRegistrationModal(null);
       router.replace("/(tabs)/projects");
       return;
     }
 
-    if (errorMessage !== "Account created. Check your email to confirm it, then log in.") {
-      setSubmittedEmail(null);
+    if (signUpResult === "EMAIL_ALREADY_USED") {
+      setRegistrationModal({
+        kind: "EMAIL_ALREADY_USED",
+        email: payload.email,
+      });
+      return;
     }
+
+    if (signUpResult === "VERIFY_EMAIL_REQUIRED") {
+      reset();
+      setRegistrationModal({
+        kind: "VERIFY_EMAIL_REQUIRED",
+        email: payload.email,
+      });
+      return;
+    }
+
+    setRegistrationModal(null);
   };
 
   return (
@@ -99,156 +127,129 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-            {isConfirmationNotice ? (
-              <>
-                <Text style={styles.heading}>Account Created</Text>
-                <Text style={styles.subheading}>Check your email to continue</Text>
-                <View style={styles.successCard}>
-                  <Text style={styles.successTitle}>Confirm your email</Text>
-                  <Text style={styles.successBody}>
-                    {submittedEmail ?? "Your account"} has been created. Open the confirmation email,
-                    verify your address, then come back here to log in.
-                  </Text>
+            <Text style={styles.heading}>Create Account</Text>
+            <Text style={styles.subheading}>with ML Technologies</Text>
+
+            <Controller
+              control={control}
+              name="name"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <TextInput
+                    autoCapitalize="words"
+                    onChangeText={onChange}
+                    placeholder="Enter your name"
+                    placeholderTextColor="#9699A8"
+                    style={styles.input}
+                    value={value}
+                  />
+                  {errors.name ? (
+                    <Text style={styles.errorText}>{errors.name.message}</Text>
+                  ) : null}
                 </View>
-                <Pressable
-                  onPress={() => {
-                    clearError();
-                    setSubmittedEmail(null);
-                    reset();
-                    router.replace("/(auth)/login");
-                  }}
-                  style={styles.secondaryButton}
-                >
-                  <Text style={styles.secondaryButtonText}>GO TO LOGIN</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Text style={styles.heading}>Create Account</Text>
-                <Text style={styles.subheading}>with ML Technologies</Text>
+              )}
+            />
 
-                <Controller
-                  control={control}
-                  name="name"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.fieldBlock}>
-                      <TextInput
-                        autoCapitalize="words"
-                        onChangeText={onChange}
-                        placeholder="Enter your name"
-                        placeholderTextColor="#9699A8"
-                        style={styles.input}
-                        value={value}
-                      />
-                      {errors.name ? (
-                        <Text style={styles.errorText}>{errors.name.message}</Text>
-                      ) : null}
-                    </View>
-                  )}
-                />
-
-                <Controller
-                  control={control}
-                  name="email"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.fieldBlock}>
-                      <TextInput
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                        onChangeText={onChange}
-                        placeholder="Enter email address"
-                        placeholderTextColor="#9699A8"
-                        style={styles.input}
-                        value={value}
-                      />
-                      {errors.email ? (
-                        <Text style={styles.errorText}>{errors.email.message}</Text>
-                      ) : null}
-                    </View>
-                  )}
-                />
-
-                <Controller
-                  control={control}
-                  name="phoneNumber"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.fieldBlock}>
-                      <TextInput
-                        keyboardType="phone-pad"
-                        onChangeText={onChange}
-                        placeholder="Enter phone number"
-                        placeholderTextColor="#9699A8"
-                        style={styles.input}
-                        value={value}
-                      />
-                      {errors.phoneNumber ? (
-                        <Text style={styles.errorText}>{errors.phoneNumber.message}</Text>
-                      ) : null}
-                    </View>
-                  )}
-                />
-
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.fieldBlock}>
-                      <TextInput
-                        onChangeText={onChange}
-                        placeholder="Enter password"
-                        placeholderTextColor="#9699A8"
-                        secureTextEntry
-                        style={styles.input}
-                        value={value}
-                      />
-                      {errors.password ? (
-                        <Text style={styles.errorText}>{errors.password.message}</Text>
-                      ) : null}
-                      {value && !errors.password && (
-                        <Text style={styles.successText}>Password meets requirements</Text>
-                      )}
-                    </View>
-                  )}
-                />
-
-                <Controller
-                  control={control}
-                  name="confirmPassword"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.fieldBlock}>
-                      <TextInput
-                        onChangeText={onChange}
-                        placeholder="Confirm password"
-                        placeholderTextColor="#9699A8"
-                        secureTextEntry
-                        style={styles.input}
-                        value={value}
-                      />
-                      {errors.confirmPassword ? (
-                        <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
-                      ) : null}
-                      {value && password && value === password && !errors.confirmPassword && (
-                        <Text style={styles.successText}>Passwords match</Text>
-                      )}
-                    </View>
-                  )}
-                />
-
-                {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
-
-                <PrimaryButton
-                  label={isSubmitting ? "CREATING ACCOUNT..." : "REGISTER"}
-                  onPress={handleSubmit(onSubmit)}
-                />
-
-                <View style={styles.loginRow}>
-                  <Text style={styles.loginText}>Already have an account?</Text>
-                  <Pressable onPress={() => router.replace("/(auth)/login")}>
-                    <Text style={styles.loginLink}>Log in</Text>
-                  </Pressable>
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <TextInput
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    onChangeText={onChange}
+                    placeholder="Enter email address"
+                    placeholderTextColor="#9699A8"
+                    style={styles.input}
+                    value={value}
+                  />
+                  {errors.email ? (
+                    <Text style={styles.errorText}>{errors.email.message}</Text>
+                  ) : null}
                 </View>
-              </>
-            )}
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="phoneNumber"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <TextInput
+                    keyboardType="phone-pad"
+                    onChangeText={onChange}
+                    placeholder="Enter phone number"
+                    placeholderTextColor="#9699A8"
+                    style={styles.input}
+                    value={value}
+                  />
+                  {errors.phoneNumber ? (
+                    <Text style={styles.errorText}>{errors.phoneNumber.message}</Text>
+                  ) : null}
+                </View>
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <TextInput
+                    onChangeText={onChange}
+                    placeholder="Enter password"
+                    placeholderTextColor="#9699A8"
+                    secureTextEntry
+                    style={styles.input}
+                    value={value}
+                  />
+                  {errors.password ? (
+                    <Text style={styles.errorText}>{errors.password.message}</Text>
+                  ) : null}
+                  {value && !errors.password && (
+                    <Text style={styles.successText}>Password meets requirements</Text>
+                  )}
+                </View>
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="confirmPassword"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <TextInput
+                    onChangeText={onChange}
+                    placeholder="Confirm password"
+                    placeholderTextColor="#9699A8"
+                    secureTextEntry
+                    style={styles.input}
+                    value={value}
+                  />
+                  {errors.confirmPassword ? (
+                    <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
+                  ) : null}
+                  {value && password && value === password && !errors.confirmPassword && (
+                    <Text style={styles.successText}>Passwords match</Text>
+                  )}
+                </View>
+              )}
+            />
+
+            {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+
+            <PrimaryButton
+              label={isSubmitting ? "CREATING ACCOUNT..." : "REGISTER"}
+              onPress={handleSubmit(onSubmit)}
+            />
+
+            <View style={styles.loginRow}>
+              <Text style={styles.loginText}>Already have an account?</Text>
+              <Pressable onPress={goToLogin}>
+                <Text style={styles.loginLink}>Log in</Text>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
 
@@ -256,6 +257,45 @@ export default function RegisterScreen() {
           By proceeding, you agree to the Terms of Service and Privacy Policy.
         </Text>
       </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeRegistrationModal}
+        transparent
+        visible={registrationModal !== null}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {registrationModal?.kind === "EMAIL_ALREADY_USED"
+                ? "Email already used"
+                : "Verification email sent!"}
+            </Text>
+
+            {registrationModal?.kind === "EMAIL_ALREADY_USED" ? (
+              <Text style={styles.modalBody}>
+                {registrationModal.email} is already used. Please log in or use another email
+                address.
+              </Text>
+            ) : (
+              <Text style={styles.modalBody}>
+                We sent a verification email to {registrationModal?.email}. Please verify your email,
+                then{" "}
+                <Text onPress={goToLogin} style={styles.modalLink}>
+                  Login here
+                </Text>
+                .
+              </Text>
+            )}
+
+            <Pressable onPress={closeRegistrationModal} style={styles.modalButton}>
+              <Text style={styles.modalButtonText}>
+                {registrationModal?.kind === "EMAIL_ALREADY_USED" ? "OK" : "CLOSE"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -348,6 +388,57 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   secondaryButtonText: {
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(20, 24, 49, 0.45)",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    maxWidth: 420,
+    padding: spacing.lg,
+    shadowColor: "#141831",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    width: "100%",
+  },
+  modalTitle: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: spacing.sm,
+    textAlign: "center",
+  },
+  modalBody: {
+    color: colors.textSecondary,
+    fontSize: typography.body,
+    lineHeight: 24,
+    marginBottom: spacing.lg,
+    textAlign: "center",
+  },
+  modalLink: {
+    color: colors.brandSoft,
+    fontSize: typography.body,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+  modalButton: {
+    alignItems: "center",
+    borderColor: "#A9AFBE",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 52,
+  },
+  modalButtonText: {
     color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "600",

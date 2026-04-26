@@ -1,6 +1,6 @@
 import { ApiClientError } from "@ml-workflow/api-client";
 import type { AppUser, ApprovalStatus, AuthStatus, Role } from "@ml-workflow/shared-types";
-import { PropsWithChildren, useEffect, useMemo, useState } from "react";
+import { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
 
 import { AuthContext } from "./AuthContext";
@@ -90,6 +90,40 @@ function deriveFullName(input: { email?: string | null; metadata?: Record<string
     .join(" ");
 }
 
+function isEmailNotConfirmedError(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) {
+    return false;
+  }
+
+  return (
+    error.code === "email_not_confirmed" ||
+    error.message?.toLowerCase().includes("email not confirmed") === true
+  );
+}
+
+function isEmailAlreadyUsedError(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) {
+    return false;
+  }
+
+  const normalizedMessage = error.message?.toLowerCase() ?? "";
+
+  return (
+    error.code === "user_already_exists" ||
+    error.code === "email_exists" ||
+    normalizedMessage.includes("already registered") ||
+    normalizedMessage.includes("already exists") ||
+    normalizedMessage.includes("already been registered")
+  );
+}
+
+function isObfuscatedExistingSignUp(authData: {
+  session?: { user?: { email?: string | null } | null } | null;
+  user?: { identities?: unknown[] | null } | null;
+}) {
+  return !authData.session && Array.isArray(authData.user?.identities) && authData.user.identities.length === 0;
+}
+
 function getStatusFromUser(user: AppUser | null): AuthStatus {
   if (!user) {
     return "SIGNED_OUT";
@@ -106,6 +140,19 @@ function getStatusFromUser(user: AppUser | null): AuthStatus {
   return "PENDING_APPROVAL";
 }
 
+function isTransientMissingBearerTokenError(error: unknown): boolean {
+  if (error instanceof ApiClientError) {
+    const message = error.message.toLowerCase();
+    return error.status === 401 && message.includes("missing bearer token");
+  }
+
+  if (error instanceof Error) {
+    return error.message.toLowerCase().includes("missing bearer token");
+  }
+
+  return false;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [isHydrating, setIsHydrating] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -120,9 +167,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     role: null,
   });
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setErrorMessage(null);
-  };
+  }, []);
 
   const applySession = ({
     accessToken = null,
@@ -328,7 +375,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           });
         })
         .catch((error) => {
-          if (isMounted) {
+          if (isMounted && !isTransientMissingBearerTokenError(error)) {
             setErrorMessage(
               error instanceof Error ? error.message : "Unable to load your account.",
             );
@@ -355,7 +402,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }: {
     email: string;
     password: string;
-  }): Promise<AuthStatus | false> => {
+  }): Promise<AuthStatus | "EMAIL_NOT_CONFIRMED" | false> => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -367,12 +414,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
         });
 
         if (authError) {
+          if (isEmailNotConfirmedError(authError)) {
+            setErrorMessage("Please verify your email before logging in.");
+            return "EMAIL_NOT_CONFIRMED";
+          }
+
           throw new Error(authError.message || "Invalid email or password");
         }
 
         if (!authData.user?.id) {
           throw new Error("Authentication failed. Please try again.");
         }
+
+        // Persist the fresh Supabase token before API calls so apiClient sends Authorization.
+        applySession({
+          accessToken: authData.session?.access_token ?? null,
+          authUserId: authData.user.id,
+          email: authData.user.email,
+          user: null,
+        });
 
         let me: BackendMeUser;
         try {
@@ -483,7 +543,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     email: string;
     phoneNumber: string;
     password: string;
-  }) => {
+  }): Promise<true | "VERIFY_EMAIL_REQUIRED" | "EMAIL_ALREADY_USED" | false> => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -504,12 +564,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
         });
 
         if (error) {
+          if (isEmailAlreadyUsedError(error)) {
+            return "EMAIL_ALREADY_USED";
+          }
+
           throw error;
         }
 
+        if (isObfuscatedExistingSignUp(authData)) {
+          return "EMAIL_ALREADY_USED";
+        }
+
         if (!authData.session?.user?.email) {
-          setErrorMessage("Account created. Check your email to confirm it, then log in.");
-          return false;
+          return "VERIFY_EMAIL_REQUIRED";
         }
 
         const bootstrapResponse = await apiClient.post<BackendMeUser>(`${apiV1Prefix}/me/bootstrap`, {

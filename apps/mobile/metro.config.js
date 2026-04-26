@@ -1,6 +1,4 @@
-const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
-const { resolve } = require("metro-resolver");
 
 const projectRoot = __dirname;
 const config = getDefaultConfig(projectRoot);
@@ -12,7 +10,7 @@ const reactEntryPoints = new Map([
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   const redirected = reactEntryPoints.get(moduleName);
-  return resolve(context, redirected ?? moduleName, platform);
+  return context.resolveRequest(context, redirected ?? moduleName, platform);
 };
 
 module.exports = config;
