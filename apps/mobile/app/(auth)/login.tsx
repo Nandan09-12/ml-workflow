@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { z } from "zod";
@@ -20,6 +20,7 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const {
     clearError,
     errorMessage,
@@ -42,7 +43,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     clearError();
-  }, [clearError]);
+  }, []);
 
   const onSubmit = async (values: LoginForm) => {
     const result = await signInWithPassword(values);
@@ -102,14 +103,24 @@ export default function LoginScreen() {
             name="password"
             render={({ field: { onChange, value } }) => (
               <View style={styles.fieldBlock}>
-                <TextInput
-                  onChangeText={onChange}
-                  placeholder="Enter password"
-                  placeholderTextColor="#9699A8"
-                  secureTextEntry
-                  style={styles.input}
-                  value={value}
-                />
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    onChangeText={onChange}
+                    placeholder="Enter password"
+                    placeholderTextColor="#9699A8"
+                    secureTextEntry={!isPasswordVisible}
+                    style={styles.passwordInput}
+                    value={value}
+                  />
+                  <Pressable
+                    onPress={() => setIsPasswordVisible((current) => !current)}
+                    style={styles.passwordToggle}
+                  >
+                    <Text style={styles.passwordToggleText}>
+                      {isPasswordVisible ? "HIDE" : "SHOW"}
+                    </Text>
+                  </Pressable>
+                </View>
                 {errors.password ? (
                   <Text style={styles.errorText}>{errors.password.message}</Text>
                 ) : null}
@@ -214,6 +225,29 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: typography.body,
     minHeight: 50,
+  },
+  passwordRow: {
+    alignItems: "center",
+    borderBottomColor: "#B7BCCA",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    minHeight: 50,
+  },
+  passwordInput: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: typography.body,
+    minHeight: 50,
+  },
+  passwordToggle: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+  },
+  passwordToggleText: {
+    color: colors.brandSoft,
+    fontSize: typography.caption,
+    fontWeight: "700",
   },
   errorText: {
     color: "#C43F5A",

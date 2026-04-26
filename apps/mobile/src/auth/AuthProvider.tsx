@@ -1,6 +1,6 @@
 import { ApiClientError } from "@ml-workflow/api-client";
 import type { AppUser, ApprovalStatus, AuthStatus, Role } from "@ml-workflow/shared-types";
-import { PropsWithChildren, useEffect, useMemo, useState } from "react";
+import { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
 
 import { AuthContext } from "./AuthContext";
@@ -106,6 +106,19 @@ function getStatusFromUser(user: AppUser | null): AuthStatus {
   return "PENDING_APPROVAL";
 }
 
+function isTransientMissingBearerTokenError(error: unknown): boolean {
+  if (error instanceof ApiClientError) {
+    const message = error.message.toLowerCase();
+    return error.status === 401 && message.includes("missing bearer token");
+  }
+
+  if (error instanceof Error) {
+    return error.message.toLowerCase().includes("missing bearer token");
+  }
+
+  return false;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [isHydrating, setIsHydrating] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -120,9 +133,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     role: null,
   });
 
-  const clearError = () => {
+  const clearError = useCallback(() => {
     setErrorMessage(null);
-  };
+  }, []);
 
   const applySession = ({
     accessToken = null,
@@ -328,7 +341,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           });
         })
         .catch((error) => {
-          if (isMounted) {
+          if (isMounted && !isTransientMissingBearerTokenError(error)) {
             setErrorMessage(
               error instanceof Error ? error.message : "Unable to load your account.",
             );
@@ -373,6 +386,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (!authData.user?.id) {
           throw new Error("Authentication failed. Please try again.");
         }
+
+        // Persist the fresh Supabase token before API calls so apiClient sends Authorization.
+        applySession({
+          accessToken: authData.session?.access_token ?? null,
+          authUserId: authData.user.id,
+          email: authData.user.email,
+          user: null,
+        });
 
         let me: BackendMeUser;
         try {
