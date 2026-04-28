@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { useAuth } from "../../src/auth/AuthContext";
+import { BackButton } from "../../src/components/BackButton";
 import { BrandHeader } from "../../src/components/BrandHeader";
 import { PrimaryButton } from "../../src/components/PrimaryButton";
 import { colors, radius, spacing, typography } from "../../src/theme/tokens";
@@ -117,6 +118,9 @@ export default function RegisterScreen() {
   return (
     <LinearGradient colors={["#EEF2FA", "#D8DBF0", "#8F83B9"]} style={styles.container}>
       <View style={styles.safeArea}>
+        <View style={styles.navRow}>
+          <BackButton fallbackHref="/(auth)/login" />
+        </View>
         <View style={styles.header}>
           <BrandHeader />
         </View>
@@ -315,6 +319,9 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  navRow: {
+    paddingTop: spacing.xs,
   },
   card: {
     backgroundColor: colors.surface,

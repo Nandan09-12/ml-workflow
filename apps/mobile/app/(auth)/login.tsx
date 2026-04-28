@@ -2,11 +2,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { useAuth } from "../../src/auth/AuthContext";
+import { BackButton } from "../../src/components/BackButton";
 import { BrandHeader } from "../../src/components/BrandHeader";
 import { PrimaryButton } from "../../src/components/PrimaryButton";
 import { colors, radius, spacing, typography } from "../../src/theme/tokens";
@@ -43,7 +44,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     clearError();
-  }, []);
+  }, [clearError]);
 
   const onSubmit = async (values: LoginForm) => {
     const result = await signInWithPassword(values);
@@ -76,110 +77,119 @@ export default function LoginScreen() {
   return (
     <LinearGradient colors={["#EEF2FA", "#D8DBF0", "#8F83B9"]} style={styles.container}>
       <View style={styles.safeArea}>
-        <View style={styles.header}>
-          <BrandHeader />
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.navRow}>
+            <BackButton fallbackHref="/" />
+          </View>
+          <View style={styles.header}>
+            <BrandHeader />
+          </View>
 
-        <View style={styles.card}>
-          <Text style={styles.heading}>Log in</Text>
-          <Text style={styles.subheading}>with your ML Technologies account</Text>
+          <View style={styles.card}>
+            <Text style={styles.heading}>Log in</Text>
+            <Text style={styles.subheading}>with your ML Technologies account</Text>
 
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.fieldBlock}>
-                <TextInput
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  onChangeText={onChange}
-                  placeholder="Enter email address"
-                  placeholderTextColor="#9699A8"
-                  style={styles.input}
-                  value={value}
-                />
-                {errors.email ? <Text style={styles.errorText}>{errors.email.message}</Text> : null}
-              </View>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.fieldBlock}>
-                <View style={styles.passwordRow}>
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
                   <TextInput
+                    autoCapitalize="none"
+                    keyboardType="email-address"
                     onChangeText={onChange}
-                    placeholder="Enter password"
+                    placeholder="Enter email address"
                     placeholderTextColor="#9699A8"
-                    secureTextEntry={!isPasswordVisible}
-                    style={styles.passwordInput}
+                    style={styles.input}
                     value={value}
                   />
-                  <Pressable
-                    onPress={() => setIsPasswordVisible((current) => !current)}
-                    style={styles.passwordToggle}
-                  >
-                    <Text style={styles.passwordToggleText}>
-                      {isPasswordVisible ? "HIDE" : "SHOW"}
-                    </Text>
-                  </Pressable>
+                  {errors.email ? <Text style={styles.errorText}>{errors.email.message}</Text> : null}
                 </View>
-                {errors.password ? (
-                  <Text style={styles.errorText}>{errors.password.message}</Text>
-                ) : null}
-              </View>
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.fieldBlock}>
+                  <View style={styles.passwordRow}>
+                    <TextInput
+                      onChangeText={onChange}
+                      placeholder="Enter password"
+                      placeholderTextColor="#9699A8"
+                      secureTextEntry={!isPasswordVisible}
+                      style={styles.passwordInput}
+                      value={value}
+                    />
+                    <Pressable
+                      onPress={() => setIsPasswordVisible((current) => !current)}
+                      style={styles.passwordToggle}
+                    >
+                      <Text style={styles.passwordToggleText}>
+                        {isPasswordVisible ? "HIDE" : "SHOW"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  {errors.password ? (
+                    <Text style={styles.errorText}>{errors.password.message}</Text>
+                  ) : null}
+                </View>
+              )}
+            />
+
+            <Controller
+              control={control}
+              name="rememberMe"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.rememberRow}>
+                  <Switch
+                    onValueChange={onChange}
+                    thumbColor={colors.surface}
+                    trackColor={{ false: "#C6CAD9", true: colors.brandSoft }}
+                    value={value}
+                  />
+                  <Text style={styles.rememberText}>Remember me</Text>
+                </View>
+              )}
+            />
+
+            {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
+
+            <PrimaryButton
+              label={isSubmitting ? "SIGNING IN..." : "LOG IN"}
+              onPress={handleSubmit(onSubmit)}
+            />
+
+            {showMicrosoftSignIn ? (
+              <>
+                <Text style={styles.dividerText}>OR</Text>
+                <Pressable onPress={goToMicrosoftLogin} style={styles.microsoftButton}>
+                  <Text style={styles.microsoftLabel}>CONTINUE WITH MICROSOFT</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.helperText}>
+                Microsoft sign-in will be added after email/password login is fully stabilized.
+              </Text>
             )}
-          />
 
-          <Controller
-            control={control}
-            name="rememberMe"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.rememberRow}>
-                <Switch
-                  onValueChange={onChange}
-                  thumbColor={colors.surface}
-                  trackColor={{ false: "#C6CAD9", true: colors.brandSoft }}
-                  value={value}
-                />
-                <Text style={styles.rememberText}>Remember me</Text>
-              </View>
-            )}
-          />
-
-          {errorMessage ? <Text style={styles.errorBanner}>{errorMessage}</Text> : null}
-
-          <PrimaryButton
-            label={isSubmitting ? "SIGNING IN..." : "LOG IN"}
-            onPress={handleSubmit(onSubmit)}
-          />
-
-          {showMicrosoftSignIn ? (
-            <>
-              <Text style={styles.dividerText}>OR</Text>
-              <Pressable onPress={goToMicrosoftLogin} style={styles.microsoftButton}>
-                <Text style={styles.microsoftLabel}>CONTINUE WITH MICROSOFT</Text>
+            <View style={styles.registerRow}>
+              <Text style={styles.registerText}>Don't have an account?</Text>
+              <Pressable onPress={goToRegister}>
+                <Text style={styles.registerLink}>Register here</Text>
               </Pressable>
-            </>
-          ) : (
-            <Text style={styles.helperText}>
-              Microsoft sign-in will be added after email/password login is fully stabilized.
-            </Text>
-          )}
-
-          <View style={styles.registerRow}>
-            <Text style={styles.registerText}>Don't have an account?</Text>
-            <Pressable onPress={goToRegister}>
-              <Text style={styles.registerLink}>Register here</Text>
-            </Pressable>
+            </View>
           </View>
-        </View>
 
-        <Text style={styles.termsText}>
-          By proceeding, you agree to the Terms of Service and Privacy Policy.
-        </Text>
+          <Text style={styles.termsText}>
+            By proceeding, you agree to the Terms of Service and Privacy Policy.
+          </Text>
+        </ScrollView>
       </View>
     </LinearGradient>
   );
@@ -194,9 +204,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xl,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   header: {
     paddingBottom: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  navRow: {
+    paddingTop: spacing.xs,
   },
   card: {
     backgroundColor: colors.surface,

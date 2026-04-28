@@ -31,11 +31,8 @@ const fccOptions = [
 
 export default function FccScreen() {
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(tabs)/projects" padded>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.backLink}>Back</Text>
-        </Pressable>
         <Text style={styles.title}>FCC</Text>
         <Text style={styles.subtitle}>Choose one workflow to build next.</Text>
       </View>
@@ -80,11 +77,6 @@ export default function FccScreen() {
 const styles = StyleSheet.create({
   header: {
     marginTop: spacing.md,
-  },
-  backLink: {
-    color: "#3478F6",
-    fontSize: typography.body,
-    fontWeight: "600",
   },
   title: {
     color: colors.textPrimary,

@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BrandHeader } from "../src/components/BrandHeader";
@@ -11,10 +11,12 @@ export default function SplashScreen() {
     <LinearGradient colors={["#FFFFFF", "#F7F8FB", "#EEF2FA"]} style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <Pressable onPress={() => router.replace("/(auth)/login")} style={styles.tapTarget}>
-          <View style={styles.content}>
-            <BrandHeader />
-            <Text style={styles.helperText}>Tap anywhere to continue</Text>
-          </View>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.content}>
+              <BrandHeader />
+              <Text style={styles.helperText}>Tap anywhere to continue</Text>
+            </View>
+          </ScrollView>
         </Pressable>
       </SafeAreaView>
     </LinearGradient>
@@ -30,6 +32,8 @@ const styles = StyleSheet.create({
   },
   tapTarget: {
     flex: 1,
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     alignItems: "center",

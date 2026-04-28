@@ -296,7 +296,7 @@ export default function DtCheckinNewScreen() {
   };
 
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(tabs)/dt-checkin" padded scrollable={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <View>

@@ -7,7 +7,7 @@ import { colors, radius, spacing, typography } from "../../src/theme/tokens";
 
 export default function MicrosoftLoginScreen() {
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(auth)/login" padded>
       <View style={styles.content}>
         <BrandHeader />
 

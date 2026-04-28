@@ -8,7 +8,7 @@ export default function SettingsScreen() {
   const { signOut, user } = useAuth();
 
   return (
-    <ScreenShell insetBottom padded>
+    <ScreenShell insetBottom padded showBackButton={false}>
       <Text style={styles.heading}>Settings</Text>
       <Text style={styles.email}>{user?.email}</Text>
 

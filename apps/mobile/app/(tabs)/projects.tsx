@@ -6,7 +6,7 @@ import { colors, radius, spacing, typography } from "../../src/theme/tokens";
 
 export default function ProjectsScreen() {
   return (
-    <ScreenShell insetBottom padded>
+    <ScreenShell insetBottom padded showBackButton={false}>
       <View style={styles.content}>
         <Text style={styles.pageTitle}>Projects</Text>
 

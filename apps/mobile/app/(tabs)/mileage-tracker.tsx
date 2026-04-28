@@ -128,7 +128,7 @@ export default function MileageTrackerScreen() {
   const isCompletedMode = currentMileage?.isCompleted === true;
 
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(tabs)/fcc" padded scrollable={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <View>
