@@ -32,6 +32,7 @@ const styles = StyleSheet.create({
   },
   tapTarget: {
     flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
   },
