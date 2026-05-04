@@ -102,7 +102,7 @@ jobs:
 
       - name: Set up pnpm
         if: steps.admin_web_changes.outputs.run == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
