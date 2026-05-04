@@ -55,5 +55,5 @@ async def request_id_middleware(
 async def root() -> dict[str, str]:
     return {
         "app": settings.app_name,
-        "env": settings.app_env,
+        "status": "ok",
     }

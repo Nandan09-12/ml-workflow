@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     app_name: str = "ML Workflow API"
     app_env: str = "development"
-    debug: bool = True
+    debug: bool | None = None
     api_v1_prefix: str = "/api/v1"
     cors_allowed_origins: str = (
         "http://localhost:3000,"
@@ -57,7 +57,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_environment_security(self) -> "Settings":
-        if self.app_env.lower() in {"production", "prod", "staging"} and self.database_ssl_mode == "disable":
+        env_name = self.app_env.lower()
+
+        if self.debug is None:
+            self.debug = env_name in {"development", "dev", "local", "test"}
+
+        if env_name in {"production", "prod", "staging"} and self.debug:
+            raise ValueError("debug cannot be enabled in production-like environments.")
+
+        if env_name in {"production", "prod", "staging"} and self.database_ssl_mode == "disable":
             raise ValueError("database_ssl_mode cannot be 'disable' in production-like environments.")
         return self
 

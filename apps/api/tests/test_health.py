@@ -10,3 +10,13 @@ def test_health_check() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
+
+
+def test_root_check_avoids_exposing_environment_name() -> None:
+    client = TestClient(app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert "env" not in body
