@@ -229,6 +229,44 @@ describe("DashboardPage", () => {
     });
   });
 
+  it("limits dashboard navigation links to whitelisted region routes", async () => {
+    mockUseDashboardSummary.mockReturnValue({
+      data: mockDashboardData,
+      isLoading: false,
+      isError: false,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderWithQueryClient(<DashboardPage />);
+
+    fireEvent.change(screen.getByTestId("region-filter"), {
+      target: { value: "NE_UP" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/workorders?region=NE_UP");
+      expect(screen.getByRole("link", { name: "Open table" })).toHaveAttribute("href", "/daily-submissions?region=NE_UP");
+      expect(screen.getByRole("link", { name: /File Pending/i })).toHaveAttribute(
+        "href",
+        "/daily-submissions?file_submission_pending=true&region=NE_UP"
+      );
+    });
+
+    fireEvent.change(screen.getByTestId("region-filter"), {
+      target: { value: "javascript:alert(1)" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/workorders");
+      expect(screen.getByRole("link", { name: "Open table" })).toHaveAttribute("href", "/daily-submissions");
+      expect(screen.getByRole("link", { name: /File Pending/i })).toHaveAttribute(
+        "href",
+        "/daily-submissions?file_submission_pending=true"
+      );
+    });
+  });
+
   it("renders metric cards with live API data", async () => {
     mockUseDashboardSummary.mockReturnValue({
       data: {

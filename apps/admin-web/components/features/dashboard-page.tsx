@@ -15,11 +15,91 @@ import { useAdminWorkorders } from "@/lib/hooks/use-admin-workorders";
 import { useDashboardSummary } from "@/lib/hooks/use-dashboard-summary";
 import { usePendingUsers } from "@/lib/hooks/use-pending-users";
 
+const DASHBOARD_REGION_VALUES = ["ALL", "NE_UP", "CENTRAL", "SOUTH_FLORIDA"] as const;
+
+type DashboardRegion = (typeof DASHBOARD_REGION_VALUES)[number];
+
+function parseDashboardRegion(value: string): DashboardRegion {
+  switch (value) {
+    case "NE_UP":
+    case "CENTRAL":
+    case "SOUTH_FLORIDA":
+      return value;
+    default:
+      return "ALL";
+  }
+}
+
+function getWorkordersHref(region: DashboardRegion): string {
+  switch (region) {
+    case "NE_UP":
+      return "/workorders?region=NE_UP";
+    case "CENTRAL":
+      return "/workorders?region=CENTRAL";
+    case "SOUTH_FLORIDA":
+      return "/workorders?region=SOUTH_FLORIDA";
+    default:
+      return "/workorders";
+  }
+}
+
+function getDailySubmissionsHref(region: DashboardRegion): string {
+  switch (region) {
+    case "NE_UP":
+      return "/daily-submissions?region=NE_UP";
+    case "CENTRAL":
+      return "/daily-submissions?region=CENTRAL";
+    case "SOUTH_FLORIDA":
+      return "/daily-submissions?region=SOUTH_FLORIDA";
+    default:
+      return "/daily-submissions";
+  }
+}
+
+function getFilePendingHref(region: DashboardRegion): string {
+  switch (region) {
+    case "NE_UP":
+      return "/daily-submissions?file_submission_pending=true&region=NE_UP";
+    case "CENTRAL":
+      return "/daily-submissions?file_submission_pending=true&region=CENTRAL";
+    case "SOUTH_FLORIDA":
+      return "/daily-submissions?file_submission_pending=true&region=SOUTH_FLORIDA";
+    default:
+      return "/daily-submissions?file_submission_pending=true";
+  }
+}
+
+function getCompletedSubmissionsHref(region: DashboardRegion): string {
+  switch (region) {
+    case "NE_UP":
+      return "/daily-submissions?submission_status=COMPLETED&region=NE_UP";
+    case "CENTRAL":
+      return "/daily-submissions?submission_status=COMPLETED&region=CENTRAL";
+    case "SOUTH_FLORIDA":
+      return "/daily-submissions?submission_status=COMPLETED&region=SOUTH_FLORIDA";
+    default:
+      return "/daily-submissions?submission_status=COMPLETED";
+  }
+}
+
+function getOngoingSubmissionsHref(region: DashboardRegion): string {
+  switch (region) {
+    case "NE_UP":
+      return "/daily-submissions?submission_status=CHECKED_OUT&region=NE_UP";
+    case "CENTRAL":
+      return "/daily-submissions?submission_status=CHECKED_OUT&region=CENTRAL";
+    case "SOUTH_FLORIDA":
+      return "/daily-submissions?submission_status=CHECKED_OUT&region=SOUTH_FLORIDA";
+    default:
+      return "/daily-submissions?submission_status=CHECKED_OUT";
+  }
+}
+
 export function DashboardPage() {
   const [workDate, setWorkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [dateFrom, setDateFrom] = useState<string | undefined>();
   const [dateTo, setDateTo] = useState<string | undefined>();
-  const [region, setRegion] = useState<"ALL" | "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA">("ALL");
+  const [region, setRegion] = useState<DashboardRegion>("ALL");
 
   const regionFilter = region === "ALL" ? undefined : region;
 
@@ -67,9 +147,14 @@ export function DashboardPage() {
       value: activeWorkorders.toString(),
       detail: `${completedWorkorders} completed`,
       tone: "brand" as const,
-      href: regionFilter
-        ? `/workorders?status=ACTIVE&region=${regionFilter}`
-        : "/workorders?status=ACTIVE",
+      href:
+        region === "NE_UP"
+          ? "/workorders?status=ACTIVE&region=NE_UP"
+          : region === "CENTRAL"
+            ? "/workorders?status=ACTIVE&region=CENTRAL"
+            : region === "SOUTH_FLORIDA"
+              ? "/workorders?status=ACTIVE&region=SOUTH_FLORIDA"
+              : "/workorders?status=ACTIVE",
     },
     {
       label: "Completed Submissions",
@@ -79,18 +164,14 @@ export function DashboardPage() {
           ? `${Math.round((completedSubmissions / completionDenominator) * 100)}% of daily records`
           : "0% of daily records",
       tone: "success" as const,
-      href: regionFilter
-        ? `/daily-submissions?submission_status=COMPLETED&region=${regionFilter}`
-        : "/daily-submissions?submission_status=COMPLETED",
+      href: getCompletedSubmissionsHref(region),
     },
     {
       label: "Ongoing Submissions",
       value: ongoingSubmissions.toString(),
       detail: "In progress",
       tone: "warning" as const,
-      href: regionFilter
-        ? `/daily-submissions?submission_status=CHECKED_OUT&region=${regionFilter}`
-        : "/daily-submissions?submission_status=CHECKED_OUT",
+      href: getOngoingSubmissionsHref(region),
     },
     {
       label: "No Submission Yet",
@@ -122,7 +203,7 @@ export function DashboardPage() {
               <span>Region</span>
               <select
                 value={region}
-                onChange={(e) => setRegion(e.target.value as "ALL" | "NE_UP" | "CENTRAL" | "SOUTH_FLORIDA")}
+                onChange={(e) => setRegion(parseDashboardRegion(e.target.value))}
                 data-testid="region-filter"
                 className="rounded-panel border border-line bg-panel px-3 py-2 text-sm font-medium text-ink"
               >
@@ -154,7 +235,7 @@ export function DashboardPage() {
             </div>
             <Link
               className="text-sm font-bold text-brand"
-              href={regionFilter ? `/workorders?region=${regionFilter}` : "/workorders"}
+              href={getWorkordersHref(region)}
             >
               View all
             </Link>
@@ -183,11 +264,7 @@ export function DashboardPage() {
           </div>
           <div className="grid gap-3">
             <Link
-              href={
-                regionFilter
-                  ? `/daily-submissions?file_submission_pending=true&region=${regionFilter}`
-                  : "/daily-submissions?file_submission_pending=true"
-              }
+              href={getFilePendingHref(region)}
               className="rounded-panel border border-line bg-slate-50 p-4 transition hover:border-brand"
             >
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-lg font-black text-brand">{filePendingPagination.total}</span>
@@ -215,7 +292,7 @@ export function DashboardPage() {
           </div>
           <Link
             className="text-sm font-bold text-brand"
-            href={regionFilter ? `/daily-submissions?region=${regionFilter}` : "/daily-submissions"}
+            href={getDailySubmissionsHref(region)}
           >
             Open table
           </Link>
