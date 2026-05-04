@@ -1,0 +1,7 @@
+{
+    "commands":  [
+                     "cd /opt/ml-workflow \u0026\u0026 sudo docker compose -f /opt/ml-workflow/deploy/docker-compose.staging.yml up -d",
+                     "sudo docker compose -f /opt/ml-workflow/deploy/docker-compose.staging.yml ps",
+                     "sudo docker ps -a"
+                 ]
+}

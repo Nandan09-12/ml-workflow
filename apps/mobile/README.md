@@ -34,6 +34,13 @@ Use Expo public env vars for client-safe configuration:
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
+Optional EAS build linkage values for a shared or pre-existing Expo project:
+
+- `EXPO_OWNER`
+- `EAS_PROJECT_ID`
+
+These are not runtime API/auth values. They are only used when Expo resolves the app config for EAS builds.
+
 Without Supabase env vars, the app falls back to a mock auth flow so UI work can continue in parallel.
 Using an email containing `pending` in mock mode routes to the pending-approval screen.
 

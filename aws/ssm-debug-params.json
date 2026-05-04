@@ -1,0 +1,6 @@
+{
+    "commands":  [
+                     "echo STATUS_CHECK",
+                     "sudo bash -lc \u0027docker ps -a; echo SEP; docker images --format \"{{.Repository}}|{{.Tag}}|{{.Size}}\" | head -n 10; echo SEP; docker logs $(docker ps -aq --filter name=caddy | head -n 1) 2\u003e/dev/null | tail -n 20 || true\u0027"
+                 ]
+}
