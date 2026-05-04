@@ -232,6 +232,7 @@ apps/mobile/eas-build-status.json
 
 # Local deployment / secret artifacts
 aws/*.pem
+aws/*.local.*
 aws/demo-user-data.sh
 
 # Marimo

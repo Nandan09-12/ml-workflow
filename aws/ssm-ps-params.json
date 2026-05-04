@@ -1,0 +1,6 @@
+{
+    "commands":  [
+                     "sudo docker ps -a --format \"{{.Names}}|{{.Status}}|{{.Ports}}\" || true",
+                     "sudo docker compose -f /opt/ml-workflow/deploy/docker-compose.staging.yml ps --format json || true"
+                 ]
+}

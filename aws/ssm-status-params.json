@@ -1,0 +1,7 @@
+{
+    "commands":  [
+                     "sudo bash -lc \u0027tail -n 80 /var/log/ml-workflow-bootstrap.log | sed -r \"s/\\x1B\\[[0-9;]*[A-Za-z]//g\" | tail -n 40\u0027",
+                     "sudo docker ps -a --format \"table {{.Names}}\\t{{.Status}}\\t{{.Ports}}\" || true",
+                     "sudo docker compose -f /opt/ml-workflow/deploy/docker-compose.staging.yml ps || true"
+                 ]
+}
