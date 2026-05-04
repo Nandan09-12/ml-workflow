@@ -50,6 +50,7 @@ def test_settings_build_connect_args_for_ssl_require_mode() -> None:
 def test_settings_build_connect_args_for_ssl_verify_full_mode() -> None:
     settings = Settings(
         app_env="production",
+        debug=False,
         database_url="postgresql+asyncpg://postgres:postgres@localhost/postgres",
         database_ssl_mode="verify-full",
     )
@@ -72,6 +73,32 @@ def test_settings_accept_release_style_debug_strings() -> None:
     )
 
     assert settings.debug is False
+
+
+def test_settings_default_debug_tracks_development_like_envs() -> None:
+    dev_settings = Settings(
+        app_env="development",
+        database_url="postgresql+asyncpg://postgres:postgres@localhost/postgres",
+        database_ssl_mode="require",
+    )
+    test_settings = Settings(
+        app_env="test",
+        database_url="postgresql+asyncpg://postgres:postgres@localhost/postgres",
+        database_ssl_mode="require",
+    )
+
+    assert dev_settings.debug is True
+    assert test_settings.debug is True
+
+
+def test_settings_reject_debug_in_production_like_envs() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            app_env="staging",
+            debug=True,
+            database_url="postgresql+asyncpg://postgres:postgres@localhost/postgres",
+            database_ssl_mode="require",
+        )
 
 
 async def test_http_exception_400_maps_to_bad_request_code() -> None:
