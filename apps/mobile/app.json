@@ -29,11 +29,7 @@
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "81f8c758-ec26-43e0-8b2a-bc1233d54b73"
       }
-    },
-    "owner": "nandansapps"
+    }
   }
 }

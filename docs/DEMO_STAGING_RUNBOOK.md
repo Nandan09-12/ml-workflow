@@ -308,15 +308,26 @@ Go to the mobile app directory:
 cd apps/mobile
 ```
 
-Because this repo does not currently have an `eas.json`, initialize EAS build config:
+This repo now includes `apps/mobile/eas.json` with a shared `preview` APK profile.
+
+Review it first:
 
 ```bash
-eas build:configure
+cat eas.json
 ```
 
-Choose Android when prompted.
+Do not rerun `eas build:configure` unless you intentionally want Expo to regenerate the file.
 
-For a manager demo, create or update `eas.json` so there is a profile that builds an APK for internal distribution.
+If you want this checkout linked to an existing Expo account/project for EAS, set these optional values before the build:
+
+```bash
+EXPO_OWNER=<team-or-user>
+EAS_PROJECT_ID=<existing-project-uuid>
+```
+
+If those are not set, `eas build` can still prompt you to create or link a project interactively.
+
+For a manager demo, keep `eas.json` aligned with an internal-distribution APK profile.
 
 Recommended shape:
 
