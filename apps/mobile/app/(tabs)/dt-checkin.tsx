@@ -86,7 +86,7 @@ export default function DtCheckinScreen() {
   }, [selectedFilter, submissions]);
 
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(tabs)/fcc" padded scrollable={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <View>

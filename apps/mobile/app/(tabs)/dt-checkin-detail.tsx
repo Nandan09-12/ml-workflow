@@ -38,7 +38,7 @@ export default function DtCheckinDetailScreen() {
 
   if (!submission) {
     return (
-      <ScreenShell padded>
+      <ScreenShell backFallbackHref="/(tabs)/dt-checkin" padded scrollable={false}>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Submission not found</Text>
           <Pressable onPress={() => router.replace("/(tabs)/dt-checkin")}>
@@ -366,7 +366,7 @@ export default function DtCheckinDetailScreen() {
         </View>
       </Modal>
 
-      <ScreenShell padded>
+      <ScreenShell backFallbackHref="/(tabs)/dt-checkin" padded scrollable={false}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.topRow}>
             <View>

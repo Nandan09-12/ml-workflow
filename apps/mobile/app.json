@@ -4,6 +4,7 @@
     "slug": "ml-workflow-mobile",
     "scheme": "mlworkflow",
     "version": "1.0.0",
+    "icon": "./assets/MLLOGO-icon.png",
     "orientation": "portrait",
     "newArchEnabled": true,
     "userInterfaceStyle": "light",
@@ -12,13 +13,18 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.ml-workflow-mobile"
+      "bundleIdentifier": "com.anonymous.ml-workflow-mobile",
+      "icon": "./assets/MLLOGO-icon.png"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/MLLOGO-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.anonymous.mlworkflowmobile"
+    },
+    "web": {
+      "favicon": "./assets/MLLOGO-icon.png"
     },
     "plugins": [
       "expo-router"
