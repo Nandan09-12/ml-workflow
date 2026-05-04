@@ -173,7 +173,7 @@ export default function DtExpensesScreen() {
   const showList = viewMode === "list";
 
   return (
-    <ScreenShell padded>
+    <ScreenShell backFallbackHref="/(tabs)/fcc" padded scrollable={false}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
           <View>
